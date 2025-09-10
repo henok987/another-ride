@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "Comprehensive Ride Service API",
-    "description": "Complete API collection for ride service with organized folders and comprehensive dummy data",
+    "name": "Ride Service API - Complete Collection",
+    "description": "Comprehensive API collection for ride service with organized folders, all endpoints, and axios integration",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -156,6 +156,45 @@
                   "  if (json.admin && json.admin._id) {",
                   "    pm.environment.set('adminId', json.admin._id);",
                   "    pm.environment.set('adminName', json.admin.fullName);",
+                  "  }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/staff/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "auth", "staff", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"staff_user\",\n  \"password\": \"StaffPass123!\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  if (json.token) pm.environment.set('staffToken', json.token);",
+                  "  if (json.staff && json.staff._id) {",
+                  "    pm.environment.set('staffId', json.staff._id);",
+                  "    pm.environment.set('staffName', json.staff.fullName);",
                   "  }",
                   "}"
                 ],
@@ -608,6 +647,23 @@
                   "raw": "{{baseUrl}}/v1/bookings/vehicle/types",
                   "host": ["{{baseUrl}}"],
                   "path": ["v1", "bookings", "vehicle", "types"]
+                }
+              }
+            },
+            {
+              "name": "Debug Authentication",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{passengerToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/bookings/debug/auth",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["v1", "bookings", "debug", "auth"]
                 }
               }
             }
