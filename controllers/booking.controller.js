@@ -281,7 +281,7 @@ exports.update = async (req, res) => {
   try {
     const updated = await Booking.findOneAndUpdate({ _id: req.params.id, passengerId: String(req.user?.id) }, req.body, { new: true });
     if (!updated) return res.status(404).json({ message: 'Booking not found or you do not have permission to update it' });
-    return res.json(updated);
+    return res.json([normalizeBooking(updated)]);
   } catch (e) { return res.status(500).json({ message: `Failed to update booking: ${e.message}` }); }
 }
 
@@ -289,7 +289,7 @@ exports.remove = async (req, res) => {
   try { 
     const r = await Booking.findOneAndDelete({ _id: req.params.id, passengerId: String(req.user?.id) }); 
     if (!r) return res.status(404).json({ message: 'Booking not found or you do not have permission to delete it' }); 
-    return res.status(204).send(); 
+    return res.json([]); 
   } catch (e) { 
     return res.status(500).json({ message: `Failed to delete booking: ${e.message}` }); 
   }
@@ -476,7 +476,13 @@ exports.assign = async (req, res) => {
     broadcast('booking:assigned', { bookingId, driverId });
     const out = normalizeBooking(booking);
     out.driverId = String(driverId);
-    out.driver = { id: String(driverId) };
+    try {
+      const { getDriverById } = require('../integrations/userService');
+      const d = await getDriverById(driverId);
+      out.driver = d ? { id: String(driverId), name: d.name, phone: d.phone } : { id: String(driverId) };
+    } catch (_) {
+      out.driver = { id: String(driverId) };
+    }
     return res.json([out]);
   } catch (e) { return res.status(500).json({ message: `Failed to assign booking: ${e.message}` }); }
 }

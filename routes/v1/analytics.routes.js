@@ -4,12 +4,12 @@ const ctrl = require('../../controllers/analytics.controller');
 const { authenticate, authorize } = require('../../middleware/auth');
 
 // Dashboard Statistics - Admin only
-router.get('/dashboard', authenticate, authorize('admin', 'superadmin'), ctrl.getDashboardStats);
+router.get('/dashboard', authenticate, authorize('admin', 'superadmin', 'staff'), ctrl.getDashboardStats);
 
 // Revenue Reports - Admin only
-router.get('/reports/daily', authenticate, authorize('admin', 'superadmin'), ctrl.getDailyReport);
-router.get('/reports/weekly', authenticate, authorize('admin', 'superadmin'), ctrl.getWeeklyReport);
-router.get('/reports/monthly', authenticate, authorize('admin', 'superadmin'), ctrl.getMonthlyReport);
+router.get('/reports/daily', authenticate, authorize('admin', 'superadmin', 'staff'), ctrl.getDailyReport);
+router.get('/reports/weekly', authenticate, authorize('admin', 'superadmin', 'staff'), ctrl.getWeeklyReport);
+router.get('/reports/monthly', authenticate, authorize('admin', 'superadmin', 'staff'), ctrl.getMonthlyReport);
 
 // Driver Earnings Management
 router.get('/earnings/driver', authenticate, authorize('driver', 'admin', 'superadmin'), ctrl.getDriverEarnings);
@@ -19,10 +19,10 @@ router.post('/commission', authenticate, authorize('admin', 'superadmin'), ctrl.
 router.get('/commission', authenticate, authorize('admin', 'superadmin'), ctrl.getCommission);
 
 // Ride History - Available to drivers and passengers
-router.get('/rides/history', authenticate, authorize('driver', 'passenger', 'admin', 'superadmin'), ctrl.getRideHistory);
+router.get('/rides/history', authenticate, authorize('admin', 'superadmin', 'staff'), ctrl.getRideHistory);
 
 // Trip History by User ID - For user service integration
-router.get('/trips/history/:userType/:userId', ctrl.getTripHistoryByUserId);
+router.get('/trips/history/:userType/:userId', authenticate, authorize('admin', 'superadmin', 'staff'), ctrl.getTripHistoryByUserId);
 
 // Finance Overview - Admin only
 router.get('/finance/overview', authenticate, authorize('admin', 'superadmin'), ctrl.getFinanceOverview);

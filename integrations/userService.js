@@ -1,15 +1,15 @@
-let fetchFn = typeof fetch === 'function' ? fetch : null;
-if (!fetchFn) {
-  try { fetchFn = require('node-fetch'); } catch (_) { /* ignore */ }
-}
+const axios = require('axios');
 
 function buildUrlFromTemplate(template, params) {
   if (!template) return null;
   return Object.keys(params || {}).reduce((acc, key) => acc.replace(new RegExp(`{${key}}`, 'g'), encodeURIComponent(String(params[key]))), template);
 }
 
-async function safeJson(res) {
-  try { return await res.json(); } catch (_) { return null; }
+async function safeData(promise) {
+  try {
+    const { data } = await promise;
+    return data;
+  } catch (_) { return null; }
 }
 
 function pickDeep(obj, pathsCsv) {
@@ -25,13 +25,11 @@ function pickDeep(obj, pathsCsv) {
 async function getPassengerById(passengerId) {
   try {
     const template = process.env.PASSENGER_LOOKUP_URL_TEMPLATE;
-    if (!fetchFn || !template || !passengerId) return null;
+    if (!template || !passengerId) return null;
     const url = buildUrlFromTemplate(template, { id: passengerId });
     const headers = { 'Accept': 'application/json' };
     if (process.env.AUTH_SERVICE_BEARER) headers['Authorization'] = `Bearer ${process.env.AUTH_SERVICE_BEARER}`;
-    const res = await fetchFn(url, { headers });
-    if (!res.ok) return null;
-    const data = await safeJson(res);
+    const data = await safeData(axios.get(url, { headers }));
     if (!data) return null;
     const candidate = data.data || data.user || data.passenger || data.account || data;
     const nameFromEnv = pickDeep(candidate, process.env.PASSENGER_NAME_PATHS);
@@ -45,13 +43,11 @@ async function getPassengerById(passengerId) {
 async function getDriverById(driverId) {
   try {
     const template = process.env.DRIVER_LOOKUP_URL_TEMPLATE;
-    if (!fetchFn || !template || !driverId) return null;
+    if (!template || !driverId) return null;
     const url = buildUrlFromTemplate(template, { id: driverId });
     const headers = { 'Accept': 'application/json' };
     if (process.env.AUTH_SERVICE_BEARER) headers['Authorization'] = `Bearer ${process.env.AUTH_SERVICE_BEARER}`;
-    const res = await fetchFn(url, { headers });
-    if (!res.ok) return null;
-    const data = await safeJson(res);
+    const data = await safeData(axios.get(url, { headers }));
     if (!data) return null;
     const candidate = data.data || data.user || data.driver || data.account || data;
     const name = candidate.name || candidate.fullName || candidate.fullname || (candidate.profile && candidate.profile.name) || undefined;
@@ -63,14 +59,12 @@ async function getDriverById(driverId) {
 async function listPassengers(query = {}) {
   try {
     const base = process.env.AUTH_BASE_URL;
-    if (!fetchFn || !base) return [];
+    if (!base) return [];
     const url = new URL(`${base.replace(/\/$/, '')}/passengers`);
     Object.entries(query).forEach(([k, v]) => { if (v != null) url.searchParams.set(k, v); });
     const headers = { 'Accept': 'application/json' };
     if (process.env.AUTH_SERVICE_BEARER) headers['Authorization'] = `Bearer ${process.env.AUTH_SERVICE_BEARER}`;
-    const res = await fetchFn(url.toString(), { headers });
-    if (!res.ok) return [];
-    const data = await safeJson(res);
+    const data = await safeData(axios.get(url.toString(), { headers }));
     const arr = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
     return arr.map(u => ({ id: String(u.id || u._id || u.userId || ''), name: u.name || u.fullName, phone: u.phone || u.msisdn }));
   } catch (_) { return []; }
@@ -79,14 +73,12 @@ async function listPassengers(query = {}) {
 async function listDrivers(query = {}) {
   try {
     const base = process.env.AUTH_BASE_URL;
-    if (!fetchFn || !base) return [];
+    if (!base) return [];
     const url = new URL(`${base.replace(/\/$/, '')}/drivers`);
     Object.entries(query).forEach(([k, v]) => { if (v != null) url.searchParams.set(k, v); });
     const headers = { 'Accept': 'application/json' };
     if (process.env.AUTH_SERVICE_BEARER) headers['Authorization'] = `Bearer ${process.env.AUTH_SERVICE_BEARER}`;
-    const res = await fetchFn(url.toString(), { headers });
-    if (!res.ok) return [];
-    const data = await safeJson(res);
+    const data = await safeData(axios.get(url.toString(), { headers }));
     const arr = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
     return arr.map(u => ({ id: String(u.id || u._id || u.userId || ''), name: u.name || u.fullName, phone: u.phone || u.msisdn }));
   } catch (_) { return []; }

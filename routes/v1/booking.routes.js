@@ -4,7 +4,7 @@ const ctrl = require('../../controllers/booking.controller');
 const { authenticate, authorize } = require('../../middleware/auth');
 
 router.post('/', authenticate, authorize('passenger'), ctrl.create);
-router.get('/', authenticate, authorize('passenger','admin','superadmin'), ctrl.list);
+router.get('/', authenticate, authorize('passenger','admin','superadmin','staff'), ctrl.list);
 // Debug endpoint to check authentication
 router.get('/debug/auth', authenticate, (req, res) => {
   res.json({ 
@@ -14,7 +14,7 @@ router.get('/debug/auth', authenticate, (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
-router.get('/:id', authenticate, authorize('passenger','admin','superadmin'), ctrl.get);
+router.get('/:id', authenticate, authorize('passenger','admin','superadmin','staff'), ctrl.get);
 router.put('/:id', authenticate, authorize('passenger'), ctrl.update);
 router.delete('/:id', authenticate, authorize('passenger'), ctrl.remove);
 // Admin and driver lifecycle and assignment
