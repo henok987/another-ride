@@ -120,3 +120,63 @@ exports.get = async (req, res) => {
 };
 
 
+// Minimal CRUD handlers for trips (primarily for admin/staff tools)
+exports.create = async (req, res) => {
+  try {
+    const { bookingId, driverId, passengerId, status, dateOfTravel } = req.body || {};
+    if (!bookingId) return res.status(400).json({ message: 'bookingId is required' });
+    const created = await TripHistory.create({
+      bookingId,
+      driverId: driverId && String(driverId),
+      passengerId: passengerId && String(passengerId),
+      status: status || 'requested',
+      dateOfTravel: dateOfTravel ? new Date(dateOfTravel) : new Date()
+    });
+    return res.status(201).json({
+      id: String(created._id),
+      bookingId: String(created.bookingId),
+      driverId: created.driverId && String(created.driverId),
+      passengerId: created.passengerId && String(created.passengerId),
+      status: created.status,
+      dateOfTravel: created.dateOfTravel,
+      createdAt: created.createdAt,
+      updatedAt: created.updatedAt
+    });
+  } catch (e) {
+    return res.status(500).json({ message: `Failed to create trip: ${e.message}` });
+  }
+};
+
+exports.update = async (req, res) => {
+  try {
+    const updated = await TripHistory.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true }
+    );
+    if (!updated) return res.status(404).json({ message: 'Trip not found' });
+    return res.json({
+      id: String(updated._id),
+      bookingId: String(updated.bookingId),
+      driverId: updated.driverId && String(updated.driverId),
+      passengerId: updated.passengerId && String(updated.passengerId),
+      status: updated.status,
+      dateOfTravel: updated.dateOfTravel,
+      createdAt: updated.createdAt,
+      updatedAt: updated.updatedAt
+    });
+  } catch (e) {
+    return res.status(500).json({ message: `Failed to update trip: ${e.message}` });
+  }
+};
+
+exports.remove = async (req, res) => {
+  try {
+    const r = await TripHistory.findByIdAndDelete(req.params.id);
+    if (!r) return res.status(404).json({ message: 'Trip not found' });
+    return res.status(204).send();
+  } catch (e) {
+    return res.status(500).json({ message: `Failed to delete trip: ${e.message}` });
+  }
+};
+
