@@ -97,8 +97,8 @@ exports.get = async (req, res) => {
     if (!r) return res.status(404).json({ message: 'Assignment not found' });
 
     const [p, d, b] = await Promise.all([
-      r.passengerId ? Passenger.findById(r.passengerId).select({ _id: 1, name: 1, phone: 1, email: 1 }).lean() : null,
-      r.driverId ? Driver.findById(r.driverId).select({ _id: 1, name: 1, phone: 1, email: 1, vehicleType: 1 }).lean() : null,
+      r.passengerId ? getPassengerById(r.passengerId).catch(() => null) : null,
+      r.driverId ? getDriverById(r.driverId).catch(() => null) : null,
       r.bookingId ? Booking.findById(r.bookingId).select({ _id: 1, status: 1, pickup: 1, dropoff: 1, vehicleType: 1, passengerName: 1, passengerPhone: 1 }).lean() : null
     ]);
 
@@ -110,8 +110,8 @@ exports.get = async (req, res) => {
       passengerId: r.passengerId && String(r.passengerId),
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
-      passenger: toBasicUser(p) || (b ? { id: String(r.passengerId), name: b.passengerName, phone: b.passengerPhone } : undefined),
-      driver: toBasicUser(d),
+      passenger: p ? { id: String(r.passengerId), name: p.name, phone: p.phone } : (b ? { id: String(r.passengerId), name: b.passengerName, phone: b.passengerPhone } : undefined),
+      driver: d ? { id: String(r.driverId), name: d.name, phone: d.phone } : undefined,
       booking: b ? {
         id: String(b._id),
         status: b.status,
@@ -127,4 +127,68 @@ exports.get = async (req, res) => {
   }
 };
 
+exports.create = async (req, res) => {
+  try {
+    const { bookingId, driverId, dispatcherId, passengerId } = req.body || {};
+    if (!bookingId) return res.status(400).json({ message: 'bookingId is required' });
+    if (!driverId) return res.status(400).json({ message: 'driverId is required' });
+
+    let passengerIdResolved = passengerId;
+    if (!passengerIdResolved) {
+      const b = await Booking.findById(bookingId).select({ passengerId: 1 }).lean();
+      if (!b) return res.status(404).json({ message: 'Booking not found' });
+      passengerIdResolved = String(b.passengerId || '');
+    }
+
+    const created = await BookingAssignment.create({
+      bookingId,
+      driverId: String(driverId),
+      dispatcherId: dispatcherId ? String(dispatcherId) : undefined,
+      passengerId: String(passengerIdResolved)
+    });
+    return res.status(201).json({
+      id: String(created._id),
+      bookingId: String(created.bookingId),
+      driverId: String(created.driverId),
+      dispatcherId: created.dispatcherId && String(created.dispatcherId),
+      passengerId: String(created.passengerId),
+      createdAt: created.createdAt,
+      updatedAt: created.updatedAt
+    });
+  } catch (e) {
+    return res.status(500).json({ message: `Failed to create assignment: ${e.message}` });
+  }
+};
+
+exports.update = async (req, res) => {
+  try {
+    const updated = await BookingAssignment.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true }
+    );
+    if (!updated) return res.status(404).json({ message: 'Assignment not found' });
+    return res.json({
+      id: String(updated._id),
+      bookingId: String(updated.bookingId),
+      driverId: updated.driverId && String(updated.driverId),
+      dispatcherId: updated.dispatcherId && String(updated.dispatcherId),
+      passengerId: updated.passengerId && String(updated.passengerId),
+      createdAt: updated.createdAt,
+      updatedAt: updated.updatedAt
+    });
+  } catch (e) {
+    return res.status(500).json({ message: `Failed to update assignment: ${e.message}` });
+  }
+};
+
+exports.remove = async (req, res) => {
+  try {
+    const r = await BookingAssignment.findByIdAndDelete(req.params.id);
+    if (!r) return res.status(404).json({ message: 'Assignment not found' });
+    return res.status(204).send();
+  } catch (e) {
+    return res.status(500).json({ message: `Failed to delete assignment: ${e.message}` });
+  }
+};
 
