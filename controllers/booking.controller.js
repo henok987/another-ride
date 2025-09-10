@@ -319,6 +319,21 @@ exports.lifecycle = async (req, res) => {
       if (activeBooking) {
         return res.status(400).json({ message: 'Driver already has an active booking' });
       }
+
+      // Verify driver is nearby to pickup (<= 3km)
+      const driverLoc = driver.lastKnownLocation;
+      const pickupLoc = booking.pickup;
+      if (!driverLoc || driverLoc.latitude == null || driverLoc.longitude == null) {
+        return res.status(400).json({ message: 'Driver location unknown. Update location before accepting.' });
+      }
+      const meters = require('geolib').getDistance(
+        { latitude: driverLoc.latitude, longitude: driverLoc.longitude },
+        { latitude: pickupLoc.latitude, longitude: pickupLoc.longitude }
+      );
+      const km = meters / 1000;
+      if (km > 3) {
+        return res.status(400).json({ message: `Driver too far from pickup (${km.toFixed(2)} km). Must be within 3 km to accept.` });
+      }
       
       // Set driver ID and make driver unavailable
       booking.driverId = String(req.user.id);
