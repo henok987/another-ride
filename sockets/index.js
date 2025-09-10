@@ -49,6 +49,12 @@ function attachSocketHandlers(io) {
           return socket.emit('booking_error', { message: 'pickup and dropoff with valid coordinates are required' });
         }
 
+        // Prevent multiple requested bookings per passenger
+        const existingRequested = await Booking.findOne({ passengerId: String(user.id), status: 'requested' }).lean();
+        if (existingRequested) {
+          return socket.emit('booking_error', { message: 'You already have a requested booking. Cancel it before creating a new one.' });
+        }
+
         const booking = await Booking.create({
           passengerId: String(user.id),
           passengerName: user.name,
@@ -111,6 +117,23 @@ function attachSocketHandlers(io) {
 
     socket.on('reject_booking', async (payload = {}) => {
       // Placeholder for custom logic; currently no state change on reject
+    });
+
+    socket.on('start_booking', async (payload = {}) => {
+      try {
+        const { Booking } = require('../models/bookingModels');
+        const { authenticateSocket } = require('./socketAuth');
+        const user = await authenticateSocket(socket);
+        if (!user || user.type !== 'driver') return;
+        const bookingId = String(payload.booking_id || payload.bookingId || '');
+        const booking = await Booking.findById(bookingId);
+        if (!booking || booking.status !== 'accepted' || String(booking.driverId) !== String(user.id)) return;
+        booking.status = 'ongoing';
+        booking.startedAt = new Date();
+        await booking.save();
+        const msg = JSON.stringify({ id: String(booking._id), status: booking.status, driverId: booking.driverId, passengerId: booking.passengerId });
+        io.emit('booking:update', msg);
+      } catch (_) {}
     });
 
     socket.on('driver:position', (payload) => {

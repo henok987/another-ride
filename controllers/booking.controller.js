@@ -474,7 +474,10 @@ exports.assign = async (req, res) => {
     await Driver.findByIdAndUpdate(driverId, { available: false });
     
     broadcast('booking:assigned', { bookingId, driverId });
-    return res.json({ booking, assignment });
+    const out = normalizeBooking(booking);
+    out.driverId = String(driverId);
+    out.driver = { id: String(driverId) };
+    return res.json([out]);
   } catch (e) { return res.status(500).json({ message: `Failed to assign booking: ${e.message}` }); }
 }
 
