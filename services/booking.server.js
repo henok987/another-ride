@@ -19,6 +19,10 @@ api.use(responseFormatter());
 api.use('/v1/bookings', require('../routes/v1/booking.routes'));
 api.use('/v1/assignments', require('../routes/v1/assignment.routes'));
 api.use('/v1/trips', require('../routes/v1/trip.routes'));
+// Additional domain routes to align with Postman
+api.use('/v1/live', require('../routes/v1/live.routes'));
+api.use('/v1/analytics', require('../routes/v1/analytics.routes'));
+api.use('/v1/passengers', require('../routes/v1/passenger.routes'));
 
 const port = process.env.BOOKING_PORT || 4001;
 const server = http.createServer(api);
