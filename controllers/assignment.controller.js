@@ -120,4 +120,100 @@ exports.get = async (req, res) => {
   }
 };
 
+exports.create = async (req, res) => {
+  try {
+    const { bookingId, driverId, passengerId, priority = 'normal', notes } = req.body;
+    const dispatcherId = req.user?.id;
+
+    if (!bookingId || !driverId || !passengerId) {
+      return res.status(400).json({ message: 'bookingId, driverId, and passengerId are required' });
+    }
+
+    // Check if assignment already exists
+    const existingAssignment = await BookingAssignment.findOne({ bookingId });
+    if (existingAssignment) {
+      return res.status(409).json({ message: 'Assignment already exists for this booking' });
+    }
+
+    const assignment = new BookingAssignment({
+      bookingId,
+      driverId,
+      passengerId,
+      dispatcherId,
+      priority,
+      notes,
+      status: 'active'
+    });
+
+    await assignment.save();
+
+    return res.status(201).json({
+      id: String(assignment._id),
+      bookingId: String(assignment.bookingId),
+      driverId: String(assignment.driverId),
+      passengerId: String(assignment.passengerId),
+      dispatcherId: String(assignment.dispatcherId),
+      priority: assignment.priority,
+      notes: assignment.notes,
+      status: assignment.status,
+      createdAt: assignment.createdAt,
+      updatedAt: assignment.updatedAt
+    });
+  } catch (e) {
+    return res.status(500).json({ message: `Failed to create assignment: ${e.message}` });
+  }
+};
+
+exports.update = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, priority, notes } = req.body;
+
+    const assignment = await BookingAssignment.findById(id);
+    if (!assignment) {
+      return res.status(404).json({ message: 'Assignment not found' });
+    }
+
+    // Update fields if provided
+    if (status) assignment.status = status;
+    if (priority) assignment.priority = priority;
+    if (notes !== undefined) assignment.notes = notes;
+
+    assignment.updatedAt = new Date();
+    await assignment.save();
+
+    return res.json({
+      id: String(assignment._id),
+      bookingId: String(assignment.bookingId),
+      driverId: String(assignment.driverId),
+      passengerId: String(assignment.passengerId),
+      dispatcherId: String(assignment.dispatcherId),
+      priority: assignment.priority,
+      notes: assignment.notes,
+      status: assignment.status,
+      createdAt: assignment.createdAt,
+      updatedAt: assignment.updatedAt
+    });
+  } catch (e) {
+    return res.status(500).json({ message: `Failed to update assignment: ${e.message}` });
+  }
+};
+
+exports.remove = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const assignment = await BookingAssignment.findById(id);
+    if (!assignment) {
+      return res.status(404).json({ message: 'Assignment not found' });
+    }
+
+    await BookingAssignment.findByIdAndDelete(id);
+
+    return res.json({ message: 'Assignment deleted successfully' });
+  } catch (e) {
+    return res.status(500).json({ message: `Failed to delete assignment: ${e.message}` });
+  }
+};
+
 
