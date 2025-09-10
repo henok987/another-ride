@@ -1,0 +1,2430 @@
+{
+  "info": {
+    "name": "Booking Service API (Role-Organized)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Passenger APIs",
+      "description": "Endpoints accessible by authenticated passengers.",
+      "item": [
+        {
+          "name": "Auth",
+          "item": [
+            {
+              "name": "Passenger Register",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/auth/passenger/register",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "auth",
+                    "passenger",
+                    "register"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"John Doe\",\n  \"phone\": \"+15550001\",\n  \"email\": \"john@example.com\",\n  \"password\": \"pass123\",\n  \"emergencyContacts\": [{\n    \"name\": \"Jane\", \"phone\": \"+15550009\"\n  }]\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Passenger Login",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "let json = pm.response.json();",
+                      "if (json.token) pm.environment.set('passengerToken', json.token);",
+                      "if (json.passenger && json.passenger._id) pm.environment.set('passengerId', json.passenger._id);"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/auth/passenger/login",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "auth",
+                    "passenger",
+                    "login"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"john@example.com\",\n  \"password\": \"pass123\"\n}"
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Drivers (Availability)",
+          "item": [
+            {
+              "name": "Available Nearby",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{passengerToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/drivers/available?latitude=8.98&longitude=38.79&radiusKm=5&vehicleType=mini",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "drivers",
+                    "available"
+                  ],
+                  "query": [
+                    {
+                      "key": "latitude",
+                      "value": "8.98"
+                    },
+                    {
+                      "key": "longitude",
+                      "value": "38.79"
+                    },
+                    {
+                      "key": "radiusKm",
+                      "value": "5"
+                    },
+                    {
+                      "key": "vehicleType",
+                      "value": "mini"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Passenger Rewards",
+          "item": [
+            {
+              "name": "Get My Rewards (Passenger)",
+              "request": {
+                "method": "GET",
+                "header": [ { "key": "Authorization", "value": "Bearer {{passengerToken}}" } ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/analytics/rewards/passenger",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["v1","analytics","rewards","passenger"]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Bookings",
+          "item": [
+            {
+              "name": "Create Booking",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "let json = pm.response.json();",
+                      "if (json._id) pm.environment.set('bookingId', json._id);"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{passengerToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/bookings",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "bookings"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"vehicleType\": \"mini\",\n  \"pickup\": { \"latitude\": 8.98, \"longitude\": 38.79 },\n  \"dropoff\": { \"latitude\": 8.99, \"longitude\": 38.80 }\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Booking",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{passengerToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/bookings/{{bookingId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "bookings",
+                    "{{bookingId}}"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Vehicle Types",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{passengerToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/bookings/vehicle/types",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "bookings",
+                    "vehicle",
+                    "types"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Fare Estimation",
+          "item": [
+            {
+              "name": "Passenger Fare Estimate",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{passengerToken}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/drivers/estimate-fare",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["v1","drivers","estimate-fare"]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"vehicleType\": \"mini\",\n  \"pickup\": { \"latitude\": 8.98, \"longitude\": 38.79 },\n  \"dropoff\": { \"latitude\": 8.99, \"longitude\": 38.80 }\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Driver Fare Estimate (by Booking)",
+              "request": {
+                "method": "GET",
+                "header": [ { "key": "Authorization", "value": "Bearer {{driverToken}}" } ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/drivers/estimate-fare/{{bookingId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["v1","drivers","estimate-fare","{{bookingId}}"]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Live (Position Updates)",
+          "item": [
+            {
+              "name": "Passenger Push Current Position",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{passengerToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/live/push",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "live",
+                    "push"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"latitude\": 8.985,\n  \"longitude\": 38.795,\n  \"status\": \"requested\",\n  \"locationType\": \"current\"\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Passenger Update Pickup Location",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{passengerToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/live/push",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "live",
+                    "push"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"latitude\": 8.985,\n  \"longitude\": 38.795,\n  \"status\": \"requested\",\n  \"locationType\": \"pickup\",\n  \"bookingId\": \"{{bookingId}}\"\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Passenger Update Dropoff Location",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{passengerToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/live/push",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "live",
+                    "push"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"latitude\": 8.990,\n  \"longitude\": 38.800,\n  \"status\": \"requested\",\n  \"locationType\": \"dropoff\",\n  \"bookingId\": \"{{bookingId}}\"\n}"
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Ratings",
+          "item": [
+            {
+              "name": "Rate Driver (Passenger)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{passengerToken}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/bookings/{{bookingId}}/rate-driver",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["v1","bookings","{{bookingId}}","rate-driver"]
+                },
+                "body": { "mode": "raw", "raw": "{\n  \"rating\": 5,\n  \"comment\": \"Great ride!\"\n}" }
+              },
+              "response": []
+            },
+            {
+              "name": "Rate Passenger (Driver)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{driverToken}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/bookings/{{bookingId}}/rate-passenger",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["v1","bookings","{{bookingId}}","rate-passenger"]
+                },
+                "body": { "mode": "raw", "raw": "{\n  \"rating\": 5,\n  \"comment\": \"Pleasant passenger\"\n}" }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Ride History",
+          "item": [
+            {
+              "name": "Get My Ride History",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{passengerToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/analytics/rides/history?page=1&limit=10",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "analytics",
+                    "rides",
+                    "history"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "10"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Completed Rides Only",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{passengerToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/analytics/rides/history?status=completed&page=1&limit=10",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "analytics",
+                    "rides",
+                    "history"
+                  ],
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "completed"
+                    },
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "10"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Trip History (Integration)",
+          "item": [
+            {
+              "name": "Get Trip History by Driver ID",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/v1/analytics/trips/history/driver/{{driverId}}?status=completed",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["v1","analytics","trips","history","driver","{{driverId}}"],
+                  "query": [ { "key": "status", "value": "completed" } ]
+                },
+                "header": []
+              },
+              "response": []
+            },
+            {
+              "name": "Get Trip History by Passenger ID",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/v1/analytics/trips/history/passenger/{{passengerId}}?status=completed",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["v1","analytics","trips","history","passenger","{{passengerId}}"],
+                  "query": [ { "key": "status", "value": "completed" } ]
+                },
+                "header": []
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Mapping & Routing",
+          "item": [
+            {
+              "name": "Route",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{passengerToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/mapping/route",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "mapping",
+                    "route"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"from\": {\n    \"latitude\": 8.98, \"longitude\": 38.79\n  },\n  \"to\": {\n    \"latitude\": 8.99, \"longitude\": 38.80\n  },\n  \"vehicle\": \"mini\"\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "ETA",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{passengerToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/mapping/eta",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "mapping",
+                    "eta"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"from\": {\n    \"latitude\": 8.98, \"longitude\": 38.79\n  },\n  \"to\": {\n    \"latitude\": 8.99, \"longitude\": 38.80\n  },\n  \"vehicle\": \"mini\"\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Booking Progress",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{passengerToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/mapping/booking/{{bookingId}}/progress",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "mapping",
+                    "booking",
+                    "{{bookingId}}",
+                    "progress"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Driver APIs",
+      "description": "Endpoints for authenticated drivers to manage their status and location.",
+      "item": [
+        {
+          "name": "Driver Management",
+          "item": [
+            {
+              "name": "Driver Set Availability",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{driverToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/drivers/{{driverId}}/availability",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "drivers",
+                    "{{driverId}}",
+                    "availability"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"available\": true\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Driver Update Location",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{driverToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/drivers/{{driverId}}/location",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "drivers",
+                    "{{driverId}}",
+                    "location"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"latitude\": 8.98,\n  \"longitude\": 38.79,\n  \"bearing\": 45\n}"
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Driver Rewards",
+          "item": [
+            {
+              "name": "Get My Rewards (Driver)",
+              "request": {
+                "method": "GET",
+                "header": [ { "key": "Authorization", "value": "Bearer {{driverToken}}" } ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/analytics/rewards/driver",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["v1","analytics","rewards","driver"]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Bookings",
+          "item": [
+            {
+              "name": "Driver Accept Booking",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{driverToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/bookings/{{bookingId}}/lifecycle",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "bookings",
+                    "{{bookingId}}",
+                    "lifecycle"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"accepted\"\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Driver Cancel Trip",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{driverToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/bookings/{{bookingId}}/lifecycle",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "bookings",
+                    "{{bookingId}}",
+                    "lifecycle"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"canceled\"\n}"
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Live (Position Updates)",
+          "item": [
+            {
+              "name": "Driver Push Current Position",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{driverToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/live/push",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "live",
+                    "push"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"latitude\": 8.98,\n  \"longitude\": 38.79,\n  \"status\": \"ongoing\",\n  \"locationType\": \"current\"\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Driver Push Position During Trip",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{driverToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/live/push",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "live",
+                    "push"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"latitude\": 8.985,\n  \"longitude\": 38.795,\n  \"status\": \"ongoing\",\n  \"locationType\": \"current\",\n  \"tripId\": \"{{tripId}}\"\n}"
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Driver Earnings",
+          "item": [
+            {
+              "name": "Get My Earnings (Daily)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{driverToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/analytics/earnings/driver?period=daily",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "analytics",
+                    "earnings",
+                    "driver"
+                  ],
+                  "query": [
+                    {
+                      "key": "period",
+                      "value": "daily"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get My Earnings (Weekly)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{driverToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/analytics/earnings/driver?period=weekly",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "analytics",
+                    "earnings",
+                    "driver"
+                  ],
+                  "query": [
+                    {
+                      "key": "period",
+                      "value": "weekly"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get My Earnings (Monthly)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{driverToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/analytics/earnings/driver?period=monthly",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "analytics",
+                    "earnings",
+                    "driver"
+                  ],
+                  "query": [
+                    {
+                      "key": "period",
+                      "value": "monthly"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Driver Ride History",
+          "item": [
+            {
+              "name": "Get My Ride History",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{driverToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/analytics/rides/history?page=1&limit=10",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "analytics",
+                    "rides",
+                    "history"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "10"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Admin/Staff APIs",
+      "description": "Endpoints for administrators, dispatchers, and other staff.",
+      "item": [
+        {
+          "name": "Auth",
+          "item": [
+            {
+              "name": "Admin Register",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/auth/admin/register",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "auth",
+                    "admin",
+                    "register"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"fullName\": \"Admin\",\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Admin Login",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "let json = pm.response.json();",
+                      "if (json.token) pm.environment.set('adminToken', json.token);",
+                      "if (json.admin && json.admin._id) pm.environment.set('adminId', json.admin._id);"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/auth/admin/login",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "auth",
+                    "admin",
+                    "login"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Staff Login",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "let json = pm.response.json();",
+                      "if (json.token) pm.environment.set('staffToken', json.token);",
+                      "if (json.staff && json.staff._id) pm.environment.set('staffId', json.staff._id);"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/auth/staff/login",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "auth",
+                    "staff",
+                    "login"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"staff_user\",\n  \"password\": \"staff_password\"\n}"
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Passenger Management",
+          "item": [
+            {
+              "name": "Create Passenger (Admin)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/passengers",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "passengers"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Jane Doe\",\n  \"phone\": \"+15551222\",\n  \"email\": \"jane@example.com\",\n  \"password\": \"pass123\"\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "List Passengers",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/passengers",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "passengers"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Passenger Details (Admin)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/passengers/{{passengerId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "passengers",
+                    "{{passengerId}}"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update Passenger (Admin)",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/passengers/{{passengerId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "passengers",
+                    "{{passengerId}}"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Updated Jane Doe\",\n  \"email\": \"jane_updated@example.com\"\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Passenger (Admin)",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/passengers/{{passengerId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "passengers",
+                    "{{passengerId}}"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Driver Management",
+          "item": [
+            {
+              "name": "List Drivers",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/drivers",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "drivers"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Driver Details (Admin)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/drivers/{{driverId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "drivers",
+                    "{{driverId}}"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Booking & Trip Management",
+          "item": [
+            {
+              "name": "Admin Estimate Fare",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/bookings/estimate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bookings",
+                    "estimate"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"vehicleType\": \"mini\",\n  \"pickup\": { \"latitude\": 8.98, \"longitude\": 38.79 },\n  \"dropoff\": { \"latitude\": 8.99, \"longitude\": 38.80 }\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "List Bookings",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/v1/bookings",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "bookings"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Booking Lifecycle → accepted",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/bookings/{{bookingId}}/lifecycle",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bookings",
+                    "{{bookingId}}",
+                    "lifecycle"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"accepted\",\n  \"driverId\": \"{{driverId}}\"\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Assign Booking (Dispatcher)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/bookings/{{bookingId}}/assign",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bookings",
+                    "{{bookingId}}",
+                    "assign"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"driverId\": \"{{driverId}}\",\n  \"dispatcherId\": \"{{adminId}}\",\n  \"passengerId\": \"{{passengerId}}\"\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Booking Lifecycle → ongoing",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/bookings/{{bookingId}}/lifecycle",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bookings",
+                    "{{bookingId}}",
+                    "lifecycle"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"ongoing\"\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Booking Lifecycle → completed",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/bookings/{{bookingId}}/lifecycle",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bookings",
+                    "{{bookingId}}",
+                    "lifecycle"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"completed\"\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Booking Lifecycle → canceled",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/bookings/{{bookingId}}/lifecycle",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bookings",
+                    "{{bookingId}}",
+                    "lifecycle"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"canceled\"\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "List Assignments",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/assignments",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "assignments"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "List Trips",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/trips",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "trips"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Assignment",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "let json = pm.response.json();",
+                      "if (json._id) pm.environment.set('assignmentId', json._id);"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/assignments",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "assignments"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"bookingId\": \"{{bookingId}}\",\n  \"driverId\": \"{{driverId}}\",\n  \"dispatcherId\": \"{{adminId}}\"\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Assignment Details",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/assignments/{{assignmentId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "assignments",
+                    "{{assignmentId}}"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update Assignment",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/assignments/{{assignmentId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "assignments",
+                    "{{assignmentId}}"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"completed\"\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Assignment",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/assignments/{{assignmentId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "assignments",
+                    "{{assignmentId}}"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Trip History",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "let json = pm.response.json();",
+                      "if (json._id) pm.environment.set('tripId', json._id);"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/trips",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "trips"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"bookingId\": \"{{bookingId}}\",\n  \"driverId\": \"{{driverId}}\",\n  \"passengerId\": \"{{passengerId}}\",\n  \"status\": \"completed\",\n  \"fare\": 25.50\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Trip History Details",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/trips/{{tripId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "trips",
+                    "{{tripId}}"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update Trip History",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/trips/{{tripId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "trips",
+                    "{{tripId}}"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"notes\": \"Driver feedback: excellent service.\"\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Trip History",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/trips/{{tripId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "trips",
+                    "{{tripId}}"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Pricing Management",
+          "item": [
+            {
+              "name": "Create Pricing",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/pricing",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "pricing"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"vehicleType\": \"mini\",\n  \"baseFare\": 2,\n  \"perKm\": 1,\n  \"perMinute\": 0.2,\n  \"waitingPerMinute\": 0.1,\n  \"surgeMultiplier\": 1\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "List Pricing",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/pricing",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "pricing"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Update Pricing (broadcast)",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/pricing/{{pricingId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "pricing",
+                    "{{pricingId}}"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"surgeMultiplier\": 1.5\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Pricing Details",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/pricing/{{pricingId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "pricing",
+                    "{{pricingId}}"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Pricing",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/pricing/{{pricingId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "pricing",
+                    "{{pricingId}}"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Live Updates (Admin/Staff)",
+          "description": "Endpoints for administrators/staff to manage live position updates.",
+          "item": [
+            {
+              "name": "Create Live Update (Admin)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "let json = pm.response.json();",
+                      "if (json._id) pm.environment.set('liveId', json._id);"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/live",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "live"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"driverId\": \"{{driverId}}\",\n  \"latitude\": 8.98,\n  \"longitude\": 38.79,\n  \"status\": \"en_route\",\n  \"tripId\": \"{{tripId}}\"\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "List Live Updates (Admin)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/live",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "live"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Live Update Details (Admin)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/live/{{liveId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "live",
+                    "{{liveId}}"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update Live Update (Admin)",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/live/{{liveId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "live",
+                    "{{liveId}}"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"arrived\"\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Live Update (Admin)",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/live/{{liveId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "live",
+                    "{{liveId}}"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Analytics & Reports",
+          "item": [
+            {
+              "name": "Get Dashboard Stats",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/analytics/dashboard",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "analytics",
+                    "dashboard"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Daily Report",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/analytics/reports/daily",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "analytics",
+                    "reports",
+                    "daily"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Weekly Report",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/analytics/reports/weekly",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "analytics",
+                    "reports",
+                    "weekly"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Monthly Report",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/analytics/reports/monthly",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "analytics",
+                    "reports",
+                    "monthly"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Finance Overview",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/analytics/finance/overview?period=monthly",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "analytics",
+                    "finance",
+                    "overview"
+                  ],
+                  "query": [
+                    {
+                      "key": "period",
+                      "value": "monthly"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Commission Management",
+          "item": [
+            {
+              "name": "Get Current Commission Rate",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/analytics/commission",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "analytics",
+                    "commission"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Set Commission Rate",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/analytics/commission",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "analytics",
+                    "commission"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"percentage\": 15,\n  \"description\": \"Standard commission rate for all rides\"\n}"
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Driver Earnings Management",
+          "item": [
+            {
+              "name": "Get Driver Earnings",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/analytics/earnings/driver?driverId={{driverId}}&period=monthly",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "analytics",
+                    "earnings",
+                    "driver"
+                  ],
+                  "query": [
+                    {
+                      "key": "driverId",
+                      "value": "{{driverId}}"
+                    },
+                    {
+                      "key": "period",
+                      "value": "monthly"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Ride History Management",
+          "item": [
+            {
+              "name": "Get All Ride History",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/analytics/rides/history?page=1&limit=10",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "analytics",
+                    "rides",
+                    "history"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "10"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
