@@ -30,7 +30,7 @@ exports.create = async (req, res) => {
     if (!pickup || !dropoff) return res.status(400).json({ message: 'Pickup and dropoff locations are required' });
     const est = await estimateFare({ vehicleType, pickup, dropoff });
     // Resolve passenger basic info from external User Service (JWT preferred)
-    const { getPassengerById } = require('../services/userDirectory');
+    const { getPassengerById } = require('../integrations/userService');
     // Extract passenger info from JWT token
     const extractFromToken = (user) => {
       if (!user) return {};
@@ -130,7 +130,7 @@ exports.list = async (req, res) => {
     
     const passengerIds = [...new Set(rows.map(r => r.passengerId))];
     console.log('Unique passenger IDs:', passengerIds);
-    const { getPassengerById } = require('../services/userDirectory');
+    const { getPassengerById } = require('../integrations/userService');
     const fetchedPassengers = await Promise.all(
       passengerIds.map(async (id) => {
         try {
@@ -224,7 +224,7 @@ exports.get = async (req, res) => {
     const item = await Booking.findOne(query).lean(); 
     if (!item) return res.status(404).json({ message: 'Booking not found or you do not have permission to access it' }); 
     // attach basic passenger info consistently from external user service
-    const { getPassengerById } = require('../services/userDirectory');
+    const { getPassengerById } = require('../integrations/userService');
     let passenger = undefined;
     
     // Try to get passenger info from JWT token first

@@ -7,12 +7,7 @@
   },
   "scripts": {
     "dev": "nodemon server.js",
-    "start": "node server.js",
-    "start:booking": "node services/booking.server.js",
-    "start:discovery": "node services/discovery.server.js",
-    "start:userproxy": "node services/userproxy.server.js",
-    "start:realtime": "node services/realtime.server.js",
-    "start:all": "npm-run-all --parallel start:booking start:discovery start:userproxy start:realtime"
+    "start": "node server.js"
   },
   "keywords": [],
   "author": "",
