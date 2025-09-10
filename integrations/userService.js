@@ -128,4 +128,17 @@ class UserService {
 // Create singleton instance
 const userService = new UserService();
 
-module.exports = userService;
+// Export individual functions for easier importing
+module.exports = {
+  getUserById: (userId, userType) => userService.getUserById(userId, userType),
+  getDriverById: (driverId) => userService.getUserById(driverId, 'driver'),
+  getPassengerById: (passengerId) => userService.getUserById(passengerId, 'passenger'),
+  getUsersByIds: (userIds, userType) => userService.getUsersByIds(userIds, userType),
+  searchUsers: (criteria, userType) => userService.searchUsers(criteria, userType),
+  updateUserStatus: (userId, status, userType) => userService.updateUserStatus(userId, status, userType),
+  getDriverLocation: (driverId) => userService.getDriverLocation(driverId),
+  updateDriverLocation: (driverId, locationData) => userService.updateDriverLocation(driverId, locationData),
+  healthCheck: () => userService.healthCheck(),
+  // Also export the instance for advanced usage
+  instance: userService
+};
