@@ -29,12 +29,8 @@ exports.create = async (req, res) => {
     const { vehicleType, pickup, dropoff } = req.body;
     if (!pickup || !dropoff) return res.status(400).json({ message: 'Pickup and dropoff locations are required' });
     const est = await estimateFare({ vehicleType, pickup, dropoff });
-    const { Passenger } = require('../models/userModels');
-    const { Types } = require('mongoose');
-    let p = null;
-    if (Types.ObjectId.isValid(passengerId)) {
-      p = await Passenger.findById(passengerId).select({ _id: 1, name: 1, phone: 1 }).lean();
-    }
+    // Resolve passenger basic info from external User Service (JWT preferred)
+    const { getPassengerById } = require('../services/userDirectory');
     // Extract passenger info from JWT token
     const extractFromToken = (user) => {
       if (!user) return {};
@@ -51,28 +47,19 @@ exports.create = async (req, res) => {
       return result;
     };
     const tokenMeta = extractFromToken(req.user);
-    // Prioritize JWT token data first, then database, then external service
-    let passengerName = tokenMeta.name || p?.name || undefined;
-    let passengerPhone = tokenMeta.phone || p?.phone || undefined;
-    
-    // Fallback: Use hardcoded passenger data for testing (based on your JWT token)
+    // Priority: JWT > External User Service > Stored fallback
+    let passengerName = tokenMeta.name || undefined;
+    let passengerPhone = tokenMeta.phone || undefined;
     if (!passengerName || !passengerPhone) {
-      console.log('Using fallback passenger data for testing');
-      // Use generic fallback data instead of hardcoded specific user
-      passengerName = passengerName || `Passenger ${passengerId}`;
-      passengerPhone = passengerPhone || `+123456789${passengerId}`;
+      const info = await getPassengerById(passengerId).catch(() => null);
+      if (info) {
+        passengerName = passengerName || info.name;
+        passengerPhone = passengerPhone || info.phone;
+      }
     }
-    
-    if (!passengerName || !passengerPhone) {
-      try {
-        const { getPassengerById } = require('../services/userDirectory');
-        const info = await getPassengerById(passengerId);
-        if (info) {
-          passengerName = passengerName || info.name;
-          passengerPhone = passengerPhone || info.phone;
-        }
-      } catch (_) {}
-    }
+    // Final generic fallback to avoid failure when external is unavailable
+    if (!passengerName) passengerName = `Passenger ${passengerId}`;
+    if (!passengerPhone) passengerPhone = `+123456789${passengerId}`;
 
     console.log('Creating booking with passenger data:', {
       passengerId,
@@ -141,67 +128,20 @@ exports.list = async (req, res) => {
       passengerPhone: rows[0]?.passengerPhone
     });
     
-    const { Passenger } = require('../models/userModels');
-    const { Types } = require('mongoose');
     const passengerIds = [...new Set(rows.map(r => r.passengerId))];
     console.log('Unique passenger IDs:', passengerIds);
-    
-    const validObjectIds = passengerIds.filter(id => Types.ObjectId.isValid(id));
-    console.log('Valid ObjectIds:', validObjectIds);
-    
-    const passengers = validObjectIds.length
-      ? await Passenger.find({ _id: { $in: validObjectIds } }).select({ _id: 1, name: 1, phone: 1 }).lean()
-      : [];
-    console.log('Found passengers in DB:', passengers.length);
-    
-    const pidToPassenger = Object.fromEntries(passengers.map(p => [String(p._id), { id: String(p._id), name: p.name, phone: p.phone }]));
-    console.log('Passenger mapping:', pidToPassenger);
-    
-    // Enhanced passenger lookup for non-ObjectId passengerIds
-    const nonObjectIdPassengerIds = passengerIds.filter(id => !Types.ObjectId.isValid(id));
-    let additionalPassengers = {};
-    if (nonObjectIdPassengerIds.length > 0) {
-      console.log('Non-ObjectId passenger IDs found:', nonObjectIdPassengerIds);
-      
-      // Try external service first
-      try {
-        const { getPassengerById } = require('../services/userDirectory');
-        const additionalPassengerPromises = nonObjectIdPassengerIds.map(async (id) => {
-          try {
-            const info = await getPassengerById(id);
-            return info ? { id, info } : null;
-          } catch (e) {
-            console.log(`Failed to fetch passenger ${id} from external service:`, e.message);
-            return null;
-          }
-        });
-        const additionalPassengerResults = await Promise.all(additionalPassengerPromises);
-        additionalPassengers = Object.fromEntries(
-          additionalPassengerResults
-            .filter(result => result !== null)
-            .map(result => [result.id, { id: result.id, name: result.info.name, phone: result.info.phone }])
-        );
-        console.log('External service results:', additionalPassengers);
-      } catch (e) {
-        console.log('Failed to fetch additional passengers from external service:', e.message);
-      }
-      
-      // Fallback: Create mock passenger data for testing
-      if (Object.keys(additionalPassengers).length === 0) {
-        console.log('Creating fallback passenger data for testing');
-        additionalPassengers = Object.fromEntries(
-          nonObjectIdPassengerIds.map(id => [
-            id, 
-            { 
-              id: id, 
-              name: `Passenger ${id}`, 
-              phone: `+123456789${id}` 
-            }
-          ])
-        );
-        console.log('Fallback passenger data:', additionalPassengers);
-      }
-    }
+    const { getPassengerById } = require('../services/userDirectory');
+    const fetchedPassengers = await Promise.all(
+      passengerIds.map(async (id) => {
+        try {
+          const info = await getPassengerById(id);
+          return info ? [String(id), { id: String(id), name: info.name, phone: info.phone }] : null;
+        } catch (e) {
+          return null;
+        }
+      })
+    );
+    const pidToPassenger = Object.fromEntries(fetchedPassengers.filter(Boolean));
     
     // Get passenger info from JWT token if available
     let jwtPassengerInfo = null;
@@ -232,17 +172,12 @@ exports.list = async (req, res) => {
         passenger = { id: b.passengerId, name: b.passengerName, phone: b.passengerPhone };
         console.log(`Using stored passenger data for booking ${b._id}:`, passenger);
       }
-      // 3. Try database lookup
+      // 3. Try external user service lookup
       else if (pidToPassenger[b.passengerId]) {
         passenger = pidToPassenger[b.passengerId];
         console.log(`Using database passenger data for booking ${b._id}:`, passenger);
       }
-      // 4. Try additional passengers (external service)
-      else if (additionalPassengers[b.passengerId]) {
-        passenger = additionalPassengers[b.passengerId];
-        console.log(`Using additional passenger data for booking ${b._id}:`, passenger);
-      }
-      // 5. Fallback to generic data for testing
+      // 4. Fallback to generic data for testing
       else {
         passenger = { id: String(b.passengerId), name: `Passenger ${b.passengerId}`, phone: `+123456789${b.passengerId}` };
         console.log(`Using generic fallback passenger data for booking ${b._id}:`, passenger);
@@ -288,9 +223,8 @@ exports.get = async (req, res) => {
     
     const item = await Booking.findOne(query).lean(); 
     if (!item) return res.status(404).json({ message: 'Booking not found or you do not have permission to access it' }); 
-    // attach basic passenger info consistently
-    const { Passenger } = require('../models/userModels');
-    const { Types } = require('mongoose');
+    // attach basic passenger info consistently from external user service
+    const { getPassengerById } = require('../services/userDirectory');
     let passenger = undefined;
     
     // Try to get passenger info from JWT token first
@@ -304,10 +238,10 @@ exports.get = async (req, res) => {
       };
     }
     
-    // Fallback to database lookup
-    if (!passenger && item.passengerId && Types.ObjectId.isValid(item.passengerId)) {
-      const p = await Passenger.findById(item.passengerId).select({ _id: 1, name: 1, phone: 1 }).lean();
-      if (p) passenger = { id: String(p._id), name: p.name, phone: p.phone };
+    // Fallback to external user service
+    if (!passenger && item.passengerId) {
+      const info = await getPassengerById(item.passengerId).catch(() => null);
+      if (info) passenger = { id: String(item.passengerId), name: info.name, phone: info.phone };
     }
     
     // Final fallback to stored passenger data

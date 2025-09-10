@@ -28,3 +28,33 @@ API Highlights
 Socket.io broadcasts:
 - `driver:position`, `pricing:update`, `booking:update`, `booking:assigned`
 
+Microservices and External User Service
+
+- Booking Service: `npm run start:booking` exposes `/v1/bookings`, `/v1/assignments`, `/v1/trips`
+- Discovery/Pricing Service: `npm run start:discovery` exposes `/v1/drivers`, `/v1/mapping`
+- User Proxy Service: `npm run start:userproxy` exposes read-only proxies:
+  - `/v1/passengers` -> external user service passengers
+  - `/v1/drivers` -> external user service drivers
+
+Environment configuration
+
+Set these to integrate with the external user microservice:
+
+- `AUTH_BASE_URL` base URL for listing users (optional)
+- `PASSENGER_LOOKUP_URL_TEMPLATE` like `https://auth.example.com/api/passengers/{id}`
+- `DRIVER_LOOKUP_URL_TEMPLATE` like `https://auth.example.com/api/drivers/{id}`
+- `AUTH_SERVICE_BEARER` optional bearer for service-to-service calls
+
+JWT verification options (optional):
+
+- `AUTH_JWKS_URL`, `AUTH_AUDIENCE`, `AUTH_ISSUER` for RS256
+- or `JWT_SECRET` for HMAC fallback
+
+Development
+
+Run all services in parallel:
+
+```
+npm run start:all
+```
+

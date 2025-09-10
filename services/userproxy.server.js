@@ -14,10 +14,9 @@ app.use(express.json());
 app.use(morgan('dev'));
 app.use(responseFormatter());
 
-// Mount user directory routes (read-only)
-app.use('/v1/passengers', require('../routes/v1/passenger.routes'));
-// Optional: create read-only driver routes that expose list/get only via driver.controller
-app.use('/v1/drivers', require('../routes/v1/driver.routes'));
+// Mount read-only proxy routes that forward to external User Service
+app.use('/v1/passengers', require('../routes/v1/userproxy.passengers.routes'));
+app.use('/v1/drivers', require('../routes/v1/userproxy.drivers.routes'));
 
 const port = process.env.USERPROXY_PORT || 4003;
 const server = http.createServer(app);
