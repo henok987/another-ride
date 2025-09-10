@@ -22,12 +22,44 @@ async function estimateFare({ vehicleType = 'mini', pickup, dropoff }) {
   return { distanceKm, fareEstimated, fareBreakdown };
 }
 
+function toBasicUser(userLike) {
+  if (!userLike) return undefined;
+  return {
+    id: userLike.id && String(userLike.id) || userLike._id && String(userLike._id) || undefined,
+    name: userLike.name,
+    phone: userLike.phone
+  };
+}
+
+function normalizeBooking(b) {
+  if (!b) return null;
+  const id = String(b._id || b.id || '');
+  return {
+    id,
+    passengerId: String(b.passengerId || ''),
+    passenger: b.passenger ? toBasicUser(b.passenger) : (b.passengerName || b.passengerPhone ? { id: String(b.passengerId || ''), name: b.passengerName, phone: b.passengerPhone } : undefined),
+    driverId: b.driverId && String(b.driverId),
+    driver: b.driver ? toBasicUser(b.driver) : undefined,
+    vehicleType: b.vehicleType,
+    pickup: b.pickup,
+    dropoff: b.dropoff,
+    status: b.status,
+    createdAt: b.createdAt,
+    updatedAt: b.updatedAt
+  };
+}
+
 exports.create = async (req, res) => {
   try {
     const passengerId = String(req.user?.id);
     if (!passengerId) return res.status(400).json({ message: 'Invalid passenger ID: user not authenticated' });
     const { vehicleType, pickup, dropoff } = req.body;
     if (!pickup || !dropoff) return res.status(400).json({ message: 'Pickup and dropoff locations are required' });
+    // Prevent multiple requested bookings per passenger
+    const existingRequested = await Booking.findOne({ passengerId, status: 'requested' }).lean();
+    if (existingRequested) {
+      return res.status(400).json({ message: 'You already have a requested booking. Cancel it before creating a new one.' });
+    }
     const est = await estimateFare({ vehicleType, pickup, dropoff });
     // Resolve passenger basic info from external User Service (JWT preferred)
     const { getPassengerById } = require('../integrations/userService');
@@ -83,22 +115,8 @@ exports.create = async (req, res) => {
       passengerName: booking.passengerName,
       passengerPhone: booking.passengerPhone
     });
-    const data = {
-      id: String(booking._id),
-      passengerId,
-      passenger: { id: passengerId, name: booking.passengerName, phone: booking.passengerPhone },
-      vehicleType,
-      pickup,
-      dropoff,
-      distanceKm: booking.distanceKm,
-      fareEstimated: booking.fareEstimated,
-      fareFinal: booking.fareFinal,
-      fareBreakdown: booking.fareBreakdown,
-      status: booking.status,
-      createdAt: booking.createdAt,
-      updatedAt: booking.updatedAt
-    };
-    return res.status(201).json(data);
+    const data = normalizeBooking(booking);
+    return res.status(201).json([data]);
   } catch (e) { return res.status(500).json({ message: `Failed to create booking: ${e.message}` }); }
 }
 
@@ -253,21 +271,7 @@ exports.get = async (req, res) => {
     if (!passenger) {
       passenger = { id: String(item.passengerId), name: `Passenger ${item.passengerId}`, phone: `+123456789${item.passengerId}` };
     }
-    return res.json({
-      id: String(item._id),
-      passengerId: item.passengerId,
-      passenger,
-      vehicleType: item.vehicleType,
-      pickup: item.pickup,
-      dropoff: item.dropoff,
-      distanceKm: item.distanceKm,
-      fareEstimated: item.fareEstimated,
-      fareFinal: item.fareFinal,
-      fareBreakdown: item.fareBreakdown,
-      status: item.status,
-      createdAt: item.createdAt,
-      updatedAt: item.updatedAt
-    }); 
+    return res.json([normalizeBooking({ ...item, passenger })]); 
   } catch (e) { 
     return res.status(500).json({ message: `Failed to retrieve booking: ${e.message}` }); 
   }
@@ -413,8 +417,9 @@ exports.lifecycle = async (req, res) => {
     
     await booking.save();
     await TripHistory.create({ bookingId: booking._id, driverId: booking.driverId, passengerId: booking.passengerId, status: booking.status });
-    broadcast('booking:update', { id: booking.id || String(booking._id || ''), status });
-    return res.json(booking);
+    const payload = normalizeBooking(booking);
+    broadcast('booking:update', payload);
+    return res.json([payload]);
   } catch (e) { return res.status(500).json({ message: `Failed to update booking lifecycle: ${e.message}` }); }
 }
 
@@ -514,12 +519,7 @@ exports.ratePassenger = async (req, res) => {
     if (comment) booking.passengerComment = comment;
     await booking.save();
 
-    return res.json({ 
-      message: 'Passenger rated successfully', 
-      booking: booking,
-      rating: rating,
-      comment: comment 
-    });
+    return res.json([{ id: String(booking._id), status: booking.status, passengerId: booking.passengerId, driverId: booking.driverId, rating }]);
   } catch (e) {
     return res.status(500).json({ message: `Failed to rate passenger: ${e.message}` });
   }
@@ -558,7 +558,7 @@ exports.rateDriver = async (req, res) => {
     if (comment) booking.driverComment = comment;
     await booking.save();
 
-    return res.json({ message: 'Driver rated successfully' });
+    return res.json([{ id: String(booking._id), status: booking.status, passengerId: booking.passengerId, driverId: booking.driverId, rating }]);
   } catch (e) {
     return res.status(500).json({ message: `Failed to rate driver: ${e.message}` });
   }

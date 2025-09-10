@@ -58,15 +58,15 @@ function attachSocketHandlers(io) {
           status: 'requested'
         });
 
-        const bookingPayload = {
+        const bookingPayload = JSON.stringify({
           id: String(booking._id),
           passengerId: booking.passengerId,
-          passenger: { id: String(user.id), name: user.name, phone: user.phone, email: user.email },
+          passenger: { id: String(user.id), name: user.name, phone: user.phone },
           pickup: booking.pickup,
           dropoff: booking.dropoff,
           status: booking.status,
           createdAt: booking.createdAt
-        };
+        });
 
         // Find nearest driver within 3km and emit only to that driver
         let nearest = { driverId: null, distance: Number.POSITIVE_INFINITY, socketId: null };
@@ -88,6 +88,29 @@ function attachSocketHandlers(io) {
       } catch (e) {
         socket.emit('booking_error', { message: e.message });
       }
+    });
+
+    // Driver accepts booking via socket
+    socket.on('accept_booking', async (payload = {}) => {
+      try {
+        const { Booking } = require('../models/bookingModels');
+        const { authenticateSocket } = require('./socketAuth');
+        const user = await authenticateSocket(socket);
+        if (!user || user.type !== 'driver') return;
+        const bookingId = String(payload.booking_id || payload.bookingId || '');
+        const booking = await Booking.findById(bookingId);
+        if (!booking || booking.status !== 'requested') return;
+        booking.driverId = String(user.id);
+        booking.status = 'accepted';
+        booking.acceptedAt = new Date();
+        await booking.save();
+        const msg = JSON.stringify({ id: String(booking._id), status: booking.status, driverId: booking.driverId, passengerId: booking.passengerId });
+        io.emit('booking:update', msg);
+      } catch (_) {}
+    });
+
+    socket.on('reject_booking', async (payload = {}) => {
+      // Placeholder for custom logic; currently no state change on reject
     });
 
     socket.on('driver:position', (payload) => {
