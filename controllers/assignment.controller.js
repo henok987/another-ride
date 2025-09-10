@@ -1,5 +1,5 @@
 const { BookingAssignment, Booking } = require('../models/bookingModels');
-const { Passenger, Driver } = require('../models/userModels');
+const { getPassengerById, getDriverById } = require('../integrations/userService');
 
 function toBasicUser(u) {
   if (!u) return undefined;
@@ -38,14 +38,21 @@ exports.list = async (req, res) => {
     const driverIds = [...new Set(rows.map(r => r.driverId).filter(Boolean))];
     const bookingIds = rows.map(r => r.bookingId).filter(Boolean);
 
-    const [passengers, drivers, bookings] = await Promise.all([
-      Passenger.find({ _id: { $in: passengerIds } }).select({ _id: 1, name: 1, phone: 1, email: 1 }).lean(),
-      Driver.find({ _id: { $in: driverIds } }).select({ _id: 1, name: 1, phone: 1, email: 1, vehicleType: 1 }).lean(),
+    const [bookings] = await Promise.all([
       Booking.find({ _id: { $in: bookingIds } }).select({ _id: 1, status: 1, pickup: 1, dropoff: 1, vehicleType: 1, passengerName: 1, passengerPhone: 1 }).lean()
     ]);
 
-    const pidMap = Object.fromEntries(passengers.map(p => [String(p._id), p]));
-    const didMap = Object.fromEntries(drivers.map(d => [String(d._id), d]));
+    // Fetch from external user service in parallel
+    const passengerLookups = await Promise.all(passengerIds.map(async (id) => {
+      const info = await getPassengerById(id).catch(() => null);
+      return info ? [String(id), { id: String(id), name: info.name, phone: info.phone }] : null;
+    }));
+    const driverLookups = await Promise.all(driverIds.map(async (id) => {
+      const info = await getDriverById(id).catch(() => null);
+      return info ? [String(id), { id: String(id), name: info.name, phone: info.phone }] : null;
+    }));
+    const pidMap = Object.fromEntries(passengerLookups.filter(Boolean));
+    const didMap = Object.fromEntries(driverLookups.filter(Boolean));
     const bidMap = Object.fromEntries(bookings.map(b => [String(b._id), b]));
 
     const data = rows.map(r => {
@@ -90,8 +97,8 @@ exports.get = async (req, res) => {
     if (!r) return res.status(404).json({ message: 'Assignment not found' });
 
     const [p, d, b] = await Promise.all([
-      r.passengerId ? Passenger.findById(r.passengerId).select({ _id: 1, name: 1, phone: 1, email: 1 }).lean() : null,
-      r.driverId ? Driver.findById(r.driverId).select({ _id: 1, name: 1, phone: 1, email: 1, vehicleType: 1 }).lean() : null,
+      r.passengerId ? getPassengerById(r.passengerId).catch(() => null) : null,
+      r.driverId ? getDriverById(r.driverId).catch(() => null) : null,
       r.bookingId ? Booking.findById(r.bookingId).select({ _id: 1, status: 1, pickup: 1, dropoff: 1, vehicleType: 1, passengerName: 1, passengerPhone: 1 }).lean() : null
     ]);
 
@@ -103,8 +110,8 @@ exports.get = async (req, res) => {
       passengerId: r.passengerId && String(r.passengerId),
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
-      passenger: toBasicUser(p) || (b ? { id: String(r.passengerId), name: b.passengerName, phone: b.passengerPhone } : undefined),
-      driver: toBasicUser(d),
+      passenger: p ? { id: String(r.passengerId), name: p.name, phone: p.phone } : (b ? { id: String(r.passengerId), name: b.passengerName, phone: b.passengerPhone } : undefined),
+      driver: d ? { id: String(r.driverId), name: d.name, phone: d.phone } : undefined,
       booking: b ? {
         id: String(b._id),
         status: b.status,
@@ -122,12 +129,11 @@ exports.get = async (req, res) => {
 
 exports.create = async (req, res) => {
   try {
-    const { bookingId, driverId, passengerId, priority = 'normal', notes } = req.body;
-    const dispatcherId = req.user?.id;
+    const { bookingId, driverId, dispatcherId, passengerId, priority = 'normal', notes } = req.body || {};
+    const resolvedDispatcherId = dispatcherId || req.user?.id;
 
-    if (!bookingId || !driverId || !passengerId) {
-      return res.status(400).json({ message: 'bookingId, driverId, and passengerId are required' });
-    }
+    if (!bookingId) return res.status(400).json({ message: 'bookingId is required' });
+    if (!driverId) return res.status(400).json({ message: 'driverId is required' });
 
     // Check if assignment already exists
     const existingAssignment = await BookingAssignment.findOne({ bookingId });
@@ -135,11 +141,18 @@ exports.create = async (req, res) => {
       return res.status(409).json({ message: 'Assignment already exists for this booking' });
     }
 
+    let passengerIdResolved = passengerId;
+    if (!passengerIdResolved) {
+      const b = await Booking.findById(bookingId).select({ passengerId: 1 }).lean();
+      if (!b) return res.status(404).json({ message: 'Booking not found' });
+      passengerIdResolved = String(b.passengerId || '');
+    }
+
     const assignment = new BookingAssignment({
       bookingId,
-      driverId,
-      passengerId,
-      dispatcherId,
+      driverId: String(driverId),
+      dispatcherId: resolvedDispatcherId ? String(resolvedDispatcherId) : undefined,
+      passengerId: String(passengerIdResolved),
       priority,
       notes,
       status: 'active'
@@ -151,8 +164,8 @@ exports.create = async (req, res) => {
       id: String(assignment._id),
       bookingId: String(assignment.bookingId),
       driverId: String(assignment.driverId),
+      dispatcherId: assignment.dispatcherId && String(assignment.dispatcherId),
       passengerId: String(assignment.passengerId),
-      dispatcherId: String(assignment.dispatcherId),
       priority: assignment.priority,
       notes: assignment.notes,
       status: assignment.status,
