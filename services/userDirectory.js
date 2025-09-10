@@ -12,6 +12,16 @@ async function safeJson(res) {
   try { return await res.json(); } catch (_) { return null; }
 }
 
+function pickDeep(obj, pathsCsv) {
+  if (!obj || !pathsCsv) return undefined;
+  const paths = String(pathsCsv).split(',').map(s => s.trim()).filter(Boolean);
+  for (const p of paths) {
+    const val = p.split('.').reduce((acc, key) => (acc && acc[key] != null ? acc[key] : undefined), obj);
+    if (val != null && val !== '') return val;
+  }
+  return undefined;
+}
+
 async function getPassengerById(passengerId) {
   try {
     const template = process.env.PASSENGER_LOOKUP_URL_TEMPLATE; // e.g. https://authservice.../api/passengers/{id}
@@ -25,8 +35,10 @@ async function getPassengerById(passengerId) {
     if (!data) return null;
     // Try common shapes
     const candidate = data.data || data.user || data.passenger || data.account || data;
-    const name = candidate.name || candidate.fullName || candidate.fullname || (candidate.profile && candidate.profile.name) || undefined;
-    const phone = candidate.phone || candidate.phoneNumber || candidate.mobile || candidate.msisdn || (candidate.contact && candidate.contact.phone) || (candidate.profile && candidate.profile.phone) || undefined;
+    const nameFromEnv = pickDeep(candidate, process.env.PASSENGER_NAME_PATHS);
+    const phoneFromEnv = pickDeep(candidate, process.env.PASSENGER_PHONE_PATHS);
+    const name = nameFromEnv || candidate.name || candidate.fullName || candidate.fullname || (candidate.profile && candidate.profile.name) || undefined;
+    const phone = phoneFromEnv || candidate.phone || candidate.phoneNumber || candidate.mobile || candidate.msisdn || (candidate.contact && candidate.contact.phone) || (candidate.profile && candidate.profile.phone) || undefined;
     return { id: passengerId, name, phone };
   } catch (_) { return null; }
 }
