@@ -528,10 +528,7 @@ exports.rateDriver = async (req, res) => {
     }
 
     // Check if the passenger is authorized to rate this driver
-    const equalIds = (a, b) => {
-      if (!a || !b) return false;
-      try { return String(a) === String(b); } catch (_) { return false; }
-    };
+    const equalIds = (a, b) => String(a || '') === String(b || '');
     if (!equalIds(booking.passengerId, passengerId)) {
       return res.status(403).json({ message: 'Only the passenger can rate the driver' });
     }

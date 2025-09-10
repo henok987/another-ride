@@ -2,6 +2,7 @@ const { Driver } = require('../models/userModels');
 const { crudController } = require('./basic.crud');
 const { Pricing } = require('../models/pricing');
 const geolib = require('geolib');
+const { getDriverById } = require('../integrations/userService');
 
 const base = {
   ...crudController(Driver),
@@ -160,8 +161,8 @@ async function availableNearby(req, res) {
     const all = await Driver.find({ available: true, ...(vehicleType ? { vehicleType } : {}) });
     const nearby = all.filter(d => d.lastKnownLocation && distanceKm(d.lastKnownLocation, { latitude: +latitude, longitude: +longitude }) <= +radiusKm);
     
-    // Enhanced driver information for passengers - use local data first, then JWT if available
-    const response = nearby.map((driver) => {
+    // Populate driver info from external user service (fallback to local)
+    const response = await Promise.all(nearby.map(async (driver) => {
       const base = {
         id: String(driver._id),
         driverId: String(driver._id),
@@ -174,18 +175,17 @@ async function availableNearby(req, res) {
         },
         distanceKm: distanceKm(driver.lastKnownLocation, { latitude: +latitude, longitude: +longitude })
       };
-      
-      // Use local driver data if available, otherwise generic fallback
+      let info = null;
+      try { info = await getDriverById(String(driver._id)); } catch (_) {}
       const driverInfo = {
         id: String(driver._id),
-        name: driver.name || `Driver ${driver._id}`,
-        phone: driver.phone || `+123456789${driver._id}`,
-        email: driver.email || `driver${driver._id}@example.com`,
+        name: (info && info.name) || driver.name || `Driver ${driver._id}`,
+        phone: (info && info.phone) || driver.phone || `+123456789${driver._id}`,
+        email: driver.email || (info && info.email) || `driver${driver._id}@example.com`,
         vehicleType: driver.vehicleType
       };
-      
       return { ...base, driver: driverInfo };
-    });
+    }));
     
     // Sort by distance (closest first)
     response.sort((a, b) => a.distanceKm - b.distanceKm);
@@ -364,8 +364,8 @@ async function discoverAndEstimate(req, res) {
     const all = await Driver.find({ available: true, ...(vehicleType ? { vehicleType } : {}) });
     const nearby = all.filter(d => d.lastKnownLocation && distanceKm(d.lastKnownLocation, { latitude: +pickup.latitude, longitude: +pickup.longitude }) <= +radiusKm);
 
-    // Use local driver data instead of external service calls
-    const drivers = nearby.map((driver) => {
+    // Populate driver info from external user service (fallback to local)
+    const drivers = await Promise.all(nearby.map(async (driver) => {
       const base = {
         id: String(driver._id),
         driverId: String(driver._id),
@@ -374,18 +374,17 @@ async function discoverAndEstimate(req, res) {
         lastKnownLocation: driver.lastKnownLocation || null,
         distanceKm: distanceKm(driver.lastKnownLocation, { latitude: +pickup.latitude, longitude: +pickup.longitude })
       };
-      
-      // Use local driver data if available, otherwise generic fallback
+      let info = null;
+      try { info = await getDriverById(String(driver._id)); } catch (_) {}
       const driverInfo = {
         id: String(driver._id),
-        name: driver.name || `Driver ${driver._id}`,
-        phone: driver.phone || `+123456789${driver._id}`,
-        email: driver.email || `driver${driver._id}@example.com`,
+        name: (info && info.name) || driver.name || `Driver ${driver._id}`,
+        phone: (info && info.phone) || driver.phone || `+123456789${driver._id}`,
+        email: driver.email || (info && info.email) || `driver${driver._id}@example.com`,
         vehicleType: driver.vehicleType
       };
-      
       return { ...base, driver: driverInfo };
-    });
+    }));
     drivers.sort((a, b) => a.distanceKm - b.distanceKm);
 
     // Fare estimation

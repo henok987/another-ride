@@ -1,6 +1,6 @@
 const { Staff } = require('../models/userModels');
 const { crudController } = require('./basic.crud');
-const { listStaff, getStaffById } = require('../services/userDirectory');
+const { listStaff, getStaffById } = require('../integrations/userService');
 
 const base = { ...crudController(Staff) };
 

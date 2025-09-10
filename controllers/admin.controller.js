@@ -1,6 +1,6 @@
 const { Admin } = require('../models/userModels');
 const { crudController } = require('./basic.crud');
-const { listAdmins, getAdminById } = require('../services/userDirectory');
+const { listAdmins, getAdminById } = require('../integrations/userService');
 
 const base = { ...crudController(Admin) };
 
