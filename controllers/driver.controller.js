@@ -170,24 +170,29 @@ async function availableNearby(req, res) {
     
     console.log(`🔍 Searching for drivers near passenger at ${passengerLat}, ${passengerLon} within ${searchRadius}km`);
     
-    // Get all drivers from external service only
-    const { listDrivers } = require('../services/userDirectory');
-    const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
+    // Get drivers from local database (since external service doesn't have location data)
+    const localDrivers = await Driver.find({ 
+      available: true, 
+      ...(vehicleType ? { vehicleType } : {}) 
+    }).lean();
+    console.log(`📊 Found ${localDrivers.length} available drivers from local database`);
     
-    let externalDrivers = [];
-    try {
-      externalDrivers = await listDrivers({ 
-        available: true, 
-        ...(vehicleType ? { vehicleType } : {}) 
-      }, { headers: authHeader });
-      console.log(`📊 Found ${externalDrivers.length} available drivers from external service`);
-    } catch (error) {
-      console.error('❌ Failed to fetch drivers from external service:', error.message);
-      return res.status(500).json({ message: 'Failed to fetch drivers from external service' });
-    }
+    // Format local drivers to match expected structure
+    const allDrivers = localDrivers.map(driver => ({
+      id: String(driver._id),
+      name: driver.name,
+      phone: driver.phone,
+      email: driver.email,
+      vehicleType: driver.vehicleType,
+      available: driver.available,
+      rating: driver.rating,
+      lastKnownLocation: driver.lastKnownLocation
+    }));
+    
+    console.log(`📊 Total drivers available: ${allDrivers.length}`);
     
     // Filter drivers by location and distance
-    const nearby = externalDrivers.filter(driver => {
+    const nearby = allDrivers.filter(driver => {
       // Check for location in both possible structures
       const location = driver.location || driver.lastKnownLocation;
       if (!location || !location.latitude || !location.longitude) {
@@ -444,24 +449,29 @@ async function discoverAndEstimate(req, res) {
     
     console.log(`🔍 Discover & Estimate: Searching for drivers near pickup at ${pickupLat}, ${pickupLon} within ${searchRadius}km`);
 
-    // Get all drivers from external service only
-    const { listDrivers } = require('../services/userDirectory');
-    const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
+    // Get drivers from local database (since external service doesn't have location data)
+    const localDrivers = await Driver.find({ 
+      available: true, 
+      ...(vehicleType ? { vehicleType } : {}) 
+    }).lean();
+    console.log(`📊 Found ${localDrivers.length} available drivers from local database`);
     
-    let externalDrivers = [];
-    try {
-      externalDrivers = await listDrivers({ 
-        available: true, 
-        ...(vehicleType ? { vehicleType } : {}) 
-      }, { headers: authHeader });
-      console.log(`📊 Found ${externalDrivers.length} available drivers from external service`);
-    } catch (error) {
-      console.error('❌ Failed to fetch drivers from external service:', error.message);
-      return res.status(500).json({ message: 'Failed to fetch drivers from external service' });
-    }
+    // Format local drivers to match expected structure
+    const allDrivers = localDrivers.map(driver => ({
+      id: String(driver._id),
+      name: driver.name,
+      phone: driver.phone,
+      email: driver.email,
+      vehicleType: driver.vehicleType,
+      available: driver.available,
+      rating: driver.rating,
+      lastKnownLocation: driver.lastKnownLocation
+    }));
+    
+    console.log(`📊 Total drivers available: ${allDrivers.length}`);
     
     // Filter drivers by location and distance
-    const nearby = externalDrivers.filter(driver => {
+    const nearby = allDrivers.filter(driver => {
       // Check for location in both possible structures
       const location = driver.location || driver.lastKnownLocation;
       if (!location || !location.latitude || !location.longitude) {
