@@ -160,8 +160,21 @@ async function availableNearby(req, res) {
     const all = await Driver.find({ available: true, ...(vehicleType ? { vehicleType } : {}) });
     const nearby = all.filter(d => d.lastKnownLocation && distanceKm(d.lastKnownLocation, { latitude: +latitude, longitude: +longitude }) <= +radiusKm);
 
-    // Enrich driver info with external user directory if local name/phone are missing
-    const { getDriverById } = require('../services/userDirectory');
+    // Enrich driver info via userService (batch) if local name/phone are missing
+    const userService = require('../integrations/userService');
+    const missingIds = nearby
+      .filter(d => !d.name || !d.phone)
+      .map(d => String(d._id));
+    let idToExternal = {};
+    if (missingIds.length) {
+      try {
+        const externals = await userService.getUsersByIds(missingIds, 'driver');
+        idToExternal = Object.fromEntries(
+          (externals || []).map(u => [String(u.id || u._id), { name: u.name, phone: u.phone }])
+        );
+      } catch (_) {}
+    }
+
     const enriched = await Promise.all(nearby.map(async (driver) => {
       const base = {
         id: String(driver._id),
@@ -176,18 +189,9 @@ async function availableNearby(req, res) {
         distanceKm: distanceKm(driver.lastKnownLocation, { latitude: +latitude, longitude: +longitude })
       };
 
-      let name = driver.name || undefined;
-      let phone = driver.phone || undefined;
+      let name = driver.name || idToExternal[String(driver._id)]?.name || undefined;
+      let phone = driver.phone || idToExternal[String(driver._id)]?.phone || undefined;
       let email = driver.email || undefined;
-      if (!name || !phone) {
-        try {
-          const ext = await getDriverById(String(driver._id));
-          if (ext) {
-            name = name || ext.name;
-            phone = phone || ext.phone;
-          }
-        } catch (_) {}
-      }
 
       const driverInfo = {
         id: String(driver._id),
@@ -377,8 +381,21 @@ async function discoverAndEstimate(req, res) {
     const all = await Driver.find({ available: true, ...(vehicleType ? { vehicleType } : {}) });
     const nearby = all.filter(d => d.lastKnownLocation && distanceKm(d.lastKnownLocation, { latitude: +pickup.latitude, longitude: +pickup.longitude }) <= +radiusKm);
 
-    // Enrich driver data with external user directory when missing
-    const { getDriverById } = require('../services/userDirectory');
+    // Enrich driver data via userService (batch) when missing
+    const userService = require('../integrations/userService');
+    const missingIds = nearby
+      .filter(d => !d.name || !d.phone)
+      .map(d => String(d._id));
+    let idToExternal = {};
+    if (missingIds.length) {
+      try {
+        const externals = await userService.getUsersByIds(missingIds, 'driver');
+        idToExternal = Object.fromEntries(
+          (externals || []).map(u => [String(u.id || u._id), { name: u.name, phone: u.phone }])
+        );
+      } catch (_) {}
+    }
+
     const drivers = await Promise.all(nearby.map(async (driver) => {
       const base = {
         id: String(driver._id),
@@ -389,18 +406,9 @@ async function discoverAndEstimate(req, res) {
         distanceKm: distanceKm(driver.lastKnownLocation, { latitude: +pickup.latitude, longitude: +pickup.longitude })
       };
 
-      let name = driver.name || undefined;
-      let phone = driver.phone || undefined;
+      let name = driver.name || idToExternal[String(driver._id)]?.name || undefined;
+      let phone = driver.phone || idToExternal[String(driver._id)]?.phone || undefined;
       let email = driver.email || undefined;
-      if (!name || !phone) {
-        try {
-          const ext = await getDriverById(String(driver._id));
-          if (ext) {
-            name = name || ext.name;
-            phone = phone || ext.phone;
-          }
-        } catch (_) {}
-      }
 
       const driverInfo = {
         id: String(driver._id),
