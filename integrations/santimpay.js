@@ -1,12 +1,140 @@
 const crypto = require('crypto');
 const fetch = require('node-fetch');
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
 const BASE_URL = process.env.SANTIMPAY_BASE_URL || 'https://gateway.santimpay.com/api';
 const GATEWAY_MERCHANT_ID = process.env.GATEWAY_MERCHANT_ID || process.env.SANTIMPAY_MERCHANT_ID || 'MERCHANT_ID';
 
-function importPrivateKey(pem) {
-  return crypto.createPrivateKey({ key: pem, format: 'pem' });
+function normalizePemString(maybePem) {
+  if (!maybePem) return '';
+  let key = String(maybePem).trim();
+  // Strip wrapping quotes if present
+  if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
+    key = key.slice(1, -1);
+  }
+  // Handle envs where newlines are escaped ("\\n")
+  if (key.includes('\\n') && !key.includes('\n')) {
+    key = key.replace(/\\n/g, '\n');
+  }
+  // Normalize CRLF to LF
+  key = key.replace(/\r\n/g, '\n');
+  // Ensure trailing newline for PEM parser friendliness
+  if (!key.endsWith('\n')) key += '\n';
+  // If it's base64 without headers, wrap as PKCS8
+  const looksLikeBase64 = /^[A-Za-z0-9+/=\s]+$/.test(key) && !key.includes('BEGIN');
+  if (looksLikeBase64) {
+    const body = key.replace(/\s+/g, '');
+    const chunks = body.match(/.{1,64}/g) || [body];
+    return `-----BEGIN PRIVATE KEY-----\n${chunks.join('\n')}\n-----END PRIVATE KEY-----\n`;
+  }
+  return key;
+}
+
+function readTextIfPath(maybePath) {
+  if (!maybePath) return null;
+  const candidate = String(maybePath).trim();
+  // If it looks like an absolute or relative path and exists, read it
+  const looksLikePath = candidate.endsWith('.pem') || candidate.includes('/') || candidate.includes('\\');
+  if (looksLikePath) {
+    const resolved = path.isAbsolute(candidate) ? candidate : path.join(process.cwd(), candidate);
+    if (fs.existsSync(resolved)) {
+      return fs.readFileSync(resolved, 'utf8');
+    }
+  }
+  return null;
+}
+
+function convertSec1ToPkcs8(sec1Pem) {
+  try {
+    // Import as SEC1 first
+    const sec1Key = crypto.createPrivateKey({ key: sec1Pem, format: 'pem', type: 'sec1' });
+    // Export as PKCS8
+    return sec1Key.export({ type: 'pkcs8', format: 'pem' });
+  } catch (err) {
+    return null;
+  }
+}
+
+function importPrivateKey(pem, options = {}) {
+  const normalized = normalizePemString(pem);
+  console.log('🔑 Loading private key, normalized length:', normalized.length);
+  console.log('🔑 Key starts with:', normalized.substring(0, 50) + '...');
+  
+  // Support JWK in env (stringified JSON)
+  const trimmed = String(pem || '').trim();
+  if (trimmed.startsWith('{')) {
+    try {
+      const jwk = JSON.parse(trimmed);
+      return crypto.createPrivateKey({ key: jwk, format: 'jwk' });
+    } catch (err) {
+      // fallthrough to PEM attempts below
+    }
+  }
+  
+  // Try Node auto-detection first
+  let lastError;
+  try {
+    return crypto.createPrivateKey({ key: normalized, format: 'pem', passphrase: options.passphrase });
+  } catch (err) {
+    lastError = err;
+    console.log('🔑 Auto-detection failed:', err.message);
+  }
+  
+  // Try explicit types
+  const candidates = [
+    { type: 'pkcs8', format: 'pem' },
+    { type: 'sec1', format: 'pem' }
+  ];
+  for (const opts of candidates) {
+    try {
+      return crypto.createPrivateKey({ key: normalized, format: opts.format, type: opts.type, passphrase: options.passphrase });
+    } catch (err) {
+      lastError = err;
+      console.log(`🔑 ${opts.type} failed:`, err.message);
+    }
+  }
+  
+  // Try converting SEC1 to PKCS8 if it's a SEC1 key
+  if (/BEGIN EC PRIVATE KEY/.test(normalized)) {
+    console.log('🔑 Attempting SEC1 to PKCS8 conversion...');
+    const pkcs8Pem = convertSec1ToPkcs8(normalized);
+    if (pkcs8Pem) {
+      try {
+        return crypto.createPrivateKey({ key: pkcs8Pem, format: 'pem', type: 'pkcs8' });
+      } catch (err) {
+        console.log('🔑 PKCS8 conversion failed:', err.message);
+      }
+    }
+  }
+  
+  // Provide actionable diagnostics
+  if (/BEGIN RSA PRIVATE KEY/.test(normalized)) {
+    throw new Error('Failed to import private key: RSA key provided. ES256 requires an EC P-256 key.');
+  }
+  const help = 'Ensure the private key is an EC P-256 key in PKCS8 (BEGIN PRIVATE KEY) or SEC1 (BEGIN EC PRIVATE KEY) PEM format, or a JWK with kty=EC, crv=P-256. If stored in an env var, include literal newlines or use \\n.';
+  const detail = lastError && lastError.message ? ` Cause: ${lastError.message}` : '';
+  const error = new Error(`Failed to import private key. ${help}${detail}`);
+  error.cause = lastError;
+  throw error;
+}
+
+function ensureEcP256PrivateKey(keyObject) {
+  try {
+    if (keyObject.asymmetricKeyType !== 'ec') {
+      throw new Error(`Invalid key type: ${keyObject.asymmetricKeyType}. ES256 requires EC.`);
+    }
+    const details = keyObject.asymmetricKeyDetails || {};
+    const curve = details.namedCurve || details.name;
+    if (curve && curve !== 'prime256v1' && curve !== 'P-256' && curve !== 'secp256r1') {
+      throw new Error(`Invalid EC curve: ${curve}. ES256 requires P-256 (prime256v1/secp256r1).`);
+    }
+  } catch (e) {
+    const error = new Error(`Failed to import private key. ${e.message}`);
+    error.cause = e;
+    throw error;
+  }
 }
 
 function signES256(payload, privateKeyPem) {
@@ -16,9 +144,24 @@ function signES256(payload, privateKeyPem) {
   const sign = crypto.createSign('SHA256');
   sign.update(unsigned);
   sign.end();
-  const key = importPrivateKey(privateKeyPem);
+  const key = importPrivateKey(privateKeyPem, { passphrase: process.env.PRIVATE_KEY_PASSPHRASE });
+  ensureEcP256PrivateKey(key);
   const signature = sign.sign({ key, dsaEncoding: 'ieee-p1363' }).toString('base64url');
   return `${unsigned}.${signature}`;
+}
+
+function getPrivateKeyMaterial() {
+  // Priority: explicit file env -> env content -> env path-like -> error
+  const fileFromEnv = process.env.PRIVATE_KEY_FILE || process.env.PRIVATE_KEY_PATH;
+  const fromExplicitFile = readTextIfPath(fileFromEnv);
+  if (fromExplicitFile) return fromExplicitFile;
+
+  const inline = process.env.PRIVATE_KEY_IN_PEM || process.env.PRIVATE_KEY || '';
+  if (inline) {
+    const fromInlinePath = readTextIfPath(inline);
+    return fromInlinePath || inline;
+  }
+  throw new Error('Missing PRIVATE_KEY_IN_PEM, PRIVATE_KEY_FILE, or PRIVATE_KEY_PATH');
 }
 
 async function generateSignedTokenForDirectPayment(amount, paymentReason, paymentMethod, phoneNumber) {
@@ -31,7 +174,8 @@ async function generateSignedTokenForDirectPayment(amount, paymentReason, paymen
     merchantId: GATEWAY_MERCHANT_ID,
     generated: time
   };
-  const token = signES256(payload, process.env.PRIVATE_KEY_IN_PEM);
+  const privateKeyMaterial = getPrivateKeyMaterial();
+  const token = signES256(payload, privateKeyMaterial);
   return token;
 }
 

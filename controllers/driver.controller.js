@@ -1,6 +1,7 @@
 const { Driver } = require('../models/userModels');
 const { crudController } = require('./basic.crud');
 const { Pricing } = require('../models/pricing');
+const { Commission } = require('../models/commission');
 const geolib = require('geolib');
 
 const base = {
@@ -157,92 +158,125 @@ async function updateLocation(req, res) {
 async function availableNearby(req, res) {
   try {
     const { latitude, longitude, radiusKm = 5, vehicleType } = req.query;
-    const all = await Driver.find({ available: true, ...(vehicleType ? { vehicleType } : {}) });
-    const nearby = all.filter(d => d.lastKnownLocation && distanceKm(d.lastKnownLocation, { latitude: +latitude, longitude: +longitude }) <= +radiusKm);
-
-    // Enrich driver info via templated external user directory to target the correct API
-    const { getDriverById, getDriversByIds, listDrivers } = require('../services/userDirectory');
+    
+    // Validate coordinates
+    if (!latitude || !longitude) {
+      return res.status(400).json({ message: 'latitude and longitude are required' });
+    }
+    
+    const passengerLat = parseFloat(latitude);
+    const passengerLon = parseFloat(longitude);
+    const searchRadius = parseFloat(radiusKm);
+    
+    console.log(`🔍 Searching for drivers near passenger at ${passengerLat}, ${passengerLon} within ${searchRadius}km`);
+    
+    // Get drivers from local database (for location data)
+    const localDrivers = await Driver.find({ 
+      available: true, 
+      ...(vehicleType ? { vehicleType } : {}) 
+    }).lean();
+    console.log(`📊 Found ${localDrivers.length} available drivers from local database`);
+    
+    // Get driver details from external service
+    const { getDriverById } = require('../services/userDirectory');
     const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
-
-    const enriched = await Promise.all(nearby.map(async (driver) => {
-      const base = {
+    
+    // Enrich each driver with external service data
+    const enrichedDrivers = await Promise.all(localDrivers.map(async (driver) => {
+      // Get driver info from external service
+      const externalDriver = await getDriverById(String(driver._id), { headers: authHeader });
+      
+      return {
         id: String(driver._id),
-        driverId: String(driver._id),
+        name: externalDriver?.name || 'Driver',
+        phone: externalDriver?.phone || 'N/A',
+        email: externalDriver?.email || 'N/A',
         vehicleType: driver.vehicleType,
+        available: driver.available,
+        rating: driver.rating,
+        lastKnownLocation: driver.lastKnownLocation
+      };
+    }));
+    
+    console.log(`📊 Total drivers available: ${enrichedDrivers.length}`);
+    
+    // Filter drivers by location and distance
+    const nearby = enrichedDrivers.filter(driver => {
+      // Check for location in both possible structures
+      const location = driver.location || driver.lastKnownLocation;
+      if (!location || !location.latitude || !location.longitude) {
+        console.log(`❌ Driver ${driver.id} has invalid location data:`, location);
+        return false;
+      }
+      
+      const distance = distanceKm(location, { latitude: passengerLat, longitude: passengerLon });
+      console.log(`📍 Driver ${driver.id} (${driver.name || 'No name'}) at ${location.latitude}, ${location.longitude} - distance: ${distance.toFixed(2)}km`);
+      
+      return distance <= searchRadius;
+    });
+    
+    console.log(`✅ Found ${nearby.length} drivers within ${searchRadius}km`);
+
+    // Format response
+    const enriched = nearby.map(driver => {
+      const location = driver.location || driver.lastKnownLocation;
+      const distance = distanceKm(location, { latitude: passengerLat, longitude: passengerLon });
+      
+      return {
+        id: String(driver.id),
+        driverId: String(driver.id),
+        vehicleType: driver.vehicleType || 'mini',
         rating: driver.rating || 5.0,
         lastKnownLocation: {
-          latitude: driver.lastKnownLocation.latitude,
-          longitude: driver.lastKnownLocation.longitude,
-          bearing: driver.lastKnownLocation.bearing || null
+          latitude: location.latitude,
+          longitude: location.longitude,
+          bearing: location.bearing || null
         },
-        distanceKm: distanceKm(driver.lastKnownLocation, { latitude: +latitude, longitude: +longitude })
+        distanceKm: distance,
+        driver: {
+          id: String(driver.id),
+          name: driver.name || 'Driver',
+          phone: driver.phone || 'N/A',
+          email: driver.email || 'N/A',
+          vehicleType: driver.vehicleType || 'mini'
+        }
       };
-
-      const lookupId = driver.externalId || driver._id;
-      let name = driver.name || undefined;
-      let phone = driver.phone || undefined;
-      let email = driver.email || undefined;
-      if (!name || !phone) {
-        try {
-          const ext = await getDriverById(String(lookupId), { headers: authHeader });
-          if (ext) {
-            name = name || ext.name;
-            phone = phone || ext.phone;
-            // persist enrichment for future requests
-            try {
-              const update = { };
-              if (ext.name && !driver.name) update.name = ext.name;
-              if (ext.phone && !driver.phone) update.phone = ext.phone;
-              if (driver.externalId == null && lookupId !== driver._id) update.externalId = String(lookupId);
-              if (Object.keys(update).length) await Driver.findByIdAndUpdate(driver._id, { $set: update });
-            } catch (_) {}
-          }
-          // If still missing, try listing by vehicleType or generic listing and match by id
-          if ((!name || !phone)) {
-            const list = await listDrivers({ vehicleType: driver.vehicleType }, { headers: authHeader });
-            const match = (list || []).find(u => String(u.id) === String(driver._id));
-            if (match) {
-              name = name || match.name;
-              phone = phone || match.phone;
-              // persist
-              try {
-                const update = { };
-                if (match.name && !driver.name) update.name = match.name;
-                if (match.phone && !driver.phone) update.phone = match.phone;
-                if (Object.keys(update).length) await Driver.findByIdAndUpdate(driver._id, { $set: update });
-              } catch (_) {}
-            }
-          }
-        } catch (_) {}
-      }
-
-      const driverInfo = {
-        id: String(driver._id),
-        name: name || '',
-        phone: phone || '',
-        email: email || '',
-        vehicleType: driver.vehicleType
-      };
-
-      return { ...base, driver: driverInfo };
-    }));
+    });
 
     // Sort by distance (closest first)
     enriched.sort((a, b) => a.distanceKm - b.distanceKm);
 
     return res.json(enriched);
-  } catch (e) { return res.status(500).json({ message: `Failed to find nearby drivers: ${e.message}` }); }
+  } catch (e) { 
+    console.error('Error in availableNearby:', e);
+    return res.status(500).json({ message: `Failed to find nearby drivers: ${e.message}` }); 
+  }
 }
 
 function distanceKm(a, b) {
-  if (!a || !b || a.latitude == null || b.latitude == null) return Number.POSITIVE_INFINITY;
+  if (!a || !b || a.latitude == null || b.latitude == null || a.longitude == null || b.longitude == null) {
+    console.log('❌ Invalid coordinates for distance calculation:', { a, b });
+    return Number.POSITIVE_INFINITY;
+  }
+  
+  // Handle exact same location
+  if (a.latitude === b.latitude && a.longitude === b.longitude) {
+    return 0;
+  }
+  
   const toRad = (v) => (v * Math.PI) / 180;
-  const R = 6371;
+  const R = 6371; // Earth's radius in km
   const dLat = toRad(b.latitude - a.latitude);
   const dLon = toRad(b.longitude - a.longitude);
   const lat1 = toRad(a.latitude);
   const lat2 = toRad(b.latitude);
   const aHarv = Math.sin(dLat/2)**2 + Math.sin(dLon/2)**2 * Math.cos(lat1) * Math.cos(lat2);
+  
+  // Handle edge case where points are antipodal
+  if (aHarv >= 1) {
+    return Math.PI * R;
+  }
+  
   return 2 * R * Math.asin(Math.sqrt(aHarv));
 }
 
@@ -266,10 +300,16 @@ async function estimateFareForPassenger(req, res) {
     ) / 1000;
 
     // Get pricing for vehicle type
-    const pricing = await Pricing.findOne({ vehicleType, isActive: true }).sort({ updatedAt: -1 });
-    
-    if (!pricing) {
-      return res.status(404).json({ message: `No pricing found for vehicle type: ${vehicleType}` });
+    let pricing;
+    try {
+      pricing = await Pricing.findOne({ vehicleType, isActive: true }).sort({ updatedAt: -1 });
+      
+      if (!pricing) {
+        return res.status(404).json({ message: `No pricing found for vehicle type: ${vehicleType}` });
+      }
+    } catch (error) {
+      console.error('Error finding pricing:', error);
+      return res.status(500).json({ message: `Database error: ${error.message}` });
     }
 
     // Calculate fare breakdown
@@ -330,10 +370,16 @@ async function estimateFareForDriver(req, res) {
     }
 
     // Get pricing for vehicle type
-    const pricing = await Pricing.findOne({ vehicleType: booking.vehicleType, isActive: true }).sort({ updatedAt: -1 });
-    
-    if (!pricing) {
-      return res.status(404).json({ message: `No pricing found for vehicle type: ${booking.vehicleType}` });
+    let pricing;
+    try {
+      pricing = await Pricing.findOne({ vehicleType: booking.vehicleType, isActive: true }).sort({ updatedAt: -1 });
+      
+      if (!pricing) {
+        return res.status(404).json({ message: `No pricing found for vehicle type: ${booking.vehicleType}` });
+      }
+    } catch (error) {
+      console.error('Error finding pricing for driver:', error);
+      return res.status(500).json({ message: `Database error: ${error.message}` });
     }
 
     // Calculate fare breakdown
@@ -348,8 +394,14 @@ async function estimateFareForDriver(req, res) {
     const estimatedFare = (fareBreakdown.base + fareBreakdown.distanceCost + fareBreakdown.timeCost + fareBreakdown.waitingCost) * fareBreakdown.surgeMultiplier;
 
     // Calculate driver earnings (after commission)
-    const { Commission } = require('../models/commission');
-    const commission = await Commission.findOne({ isActive: true }).sort({ createdAt: -1 });
+    let commission;
+    try {
+      commission = await Commission.findOne({ isActive: true }).sort({ createdAt: -1 });
+    } catch (error) {
+      console.error('Error finding commission:', error);
+      // Use default commission rate if database error
+      commission = null;
+    }
     const commissionRate = commission ? commission.percentage : 15; // Default 15%
     
     const grossFare = estimatedFare;
@@ -400,84 +452,97 @@ async function discoverAndEstimate(req, res) {
       return res.status(400).json({ message: 'Valid latitude and longitude are required for pickup and dropoff' });
     }
 
-    // Find nearby available drivers (reuse logic with minimal duplication)
-    const all = await Driver.find({ available: true, ...(vehicleType ? { vehicleType } : {}) });
-    const nearby = all.filter(d => d.lastKnownLocation && distanceKm(d.lastKnownLocation, { latitude: +pickup.latitude, longitude: +pickup.longitude }) <= +radiusKm);
+    const pickupLat = parseFloat(pickup.latitude);
+    const pickupLon = parseFloat(pickup.longitude);
+    const searchRadius = parseFloat(radiusKm);
+    
+    console.log(`🔍 Discover & Estimate: Searching for drivers near pickup at ${pickupLat}, ${pickupLon} within ${searchRadius}km`);
 
-    // Enrich driver data via templated external user directory to target the correct API
-    const { getDriverById: getDriverById2, listDrivers: listDrivers2, getDriversByIds: getDriversByIds2 } = require('../services/userDirectory');
-    const authHeader2 = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
-
-    // Try batch first for efficiency
-    let idToExternal = {};
-    try {
-      const batch = await getDriversByIds2(nearby.map(d => String(d._id)), { headers: authHeader2 });
-      idToExternal = Object.fromEntries((batch || []).map(u => [String(u.id), { name: u.name, phone: u.phone }]));
-    } catch (_) {}
-
-    const drivers = await Promise.all(nearby.map(async (driver) => {
-      const base = {
+    // Get drivers from local database (for location data)
+    const localDrivers = await Driver.find({ 
+      available: true, 
+      ...(vehicleType ? { vehicleType } : {}) 
+    }).lean();
+    console.log(`📊 Found ${localDrivers.length} available drivers from local database`);
+    
+    // Get driver details from external service
+    const { getDriverById } = require('../services/userDirectory');
+    const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
+    
+    // Enrich each driver with external service data
+    const enrichedDrivers = await Promise.all(localDrivers.map(async (driver) => {
+      // Get driver info from external service
+      const externalDriver = await getDriverById(String(driver._id), { headers: authHeader });
+      
+      return {
         id: String(driver._id),
-        driverId: String(driver._id),
+        name: externalDriver?.name || 'Driver',
+        phone: externalDriver?.phone || 'N/A',
+        email: externalDriver?.email || 'N/A',
         vehicleType: driver.vehicleType,
-        rating: driver.rating || 5.0,
-        lastKnownLocation: driver.lastKnownLocation || null,
-        distanceKm: distanceKm(driver.lastKnownLocation, { latitude: +pickup.latitude, longitude: +pickup.longitude })
+        available: driver.available,
+        rating: driver.rating,
+        lastKnownLocation: driver.lastKnownLocation
       };
-
-      const lookupId = driver.externalId || driver._id;
-      let name = idToExternal[String(lookupId)]?.name || driver.name || undefined;
-      let phone = idToExternal[String(lookupId)]?.phone || driver.phone || undefined;
-      let email = driver.email || undefined;
-      if (!name || !phone) {
-        try {
-          const ext = await getDriverById2(String(lookupId), { headers: authHeader2 });
-          if (ext) {
-            name = name || ext.name;
-            phone = phone || ext.phone;
-            // persist enrichment
-            try {
-              const update = { };
-              if (ext.name && !driver.name) update.name = ext.name;
-              if (ext.phone && !driver.phone) update.phone = ext.phone;
-              if (driver.externalId == null && lookupId !== driver._id) update.externalId = String(lookupId);
-              if (Object.keys(update).length) await Driver.findByIdAndUpdate(driver._id, { $set: update });
-            } catch (_) {}
-          }
-          if ((!name || !phone)) {
-            const list = await listDrivers2({ vehicleType: driver.vehicleType }, { headers: authHeader2 });
-            const match = (list || []).find(u => String(u.id) === String(driver._id));
-            if (match) {
-              name = name || match.name;
-              phone = phone || match.phone;
-              // persist
-              try {
-                const update = { };
-                if (match.name && !driver.name) update.name = match.name;
-                if (match.phone && !driver.phone) update.phone = match.phone;
-                if (Object.keys(update).length) await Driver.findByIdAndUpdate(driver._id, { $set: update });
-              } catch (_) {}
-            }
-          }
-        } catch (_) {}
-      }
-
-      const driverInfo = {
-        id: String(driver._id),
-        name: name || '',
-        phone: phone || '',
-        email: email || '',
-        vehicleType: driver.vehicleType
-      };
-
-      return { ...base, driver: driverInfo };
     }));
+    
+    console.log(`📊 Total drivers available: ${enrichedDrivers.length}`);
+    
+    // Filter drivers by location and distance
+    const nearby = enrichedDrivers.filter(driver => {
+      // Check for location in both possible structures
+      const location = driver.location || driver.lastKnownLocation;
+      if (!location || !location.latitude || !location.longitude) {
+        console.log(`❌ Driver ${driver.id} has invalid location data:`, location);
+        return false;
+      }
+      
+      const distance = distanceKm(location, { latitude: pickupLat, longitude: pickupLon });
+      console.log(`📍 Driver ${driver.id} (${driver.name || 'No name'}) at ${location.latitude}, ${location.longitude} - distance: ${distance.toFixed(2)}km`);
+      
+      return distance <= searchRadius;
+    });
+    
+    console.log(`✅ Found ${nearby.length} drivers within ${searchRadius}km`);
+
+    // Format response
+    const drivers = nearby.map(driver => {
+      const location = driver.location || driver.lastKnownLocation;
+      const distance = distanceKm(location, { latitude: pickupLat, longitude: pickupLon });
+      
+      return {
+        id: String(driver.id),
+        driverId: String(driver.id),
+        vehicleType: driver.vehicleType || 'mini',
+        rating: driver.rating || 5.0,
+        lastKnownLocation: {
+          latitude: location.latitude,
+          longitude: location.longitude,
+          bearing: location.bearing || null
+        },
+        distanceKm: distance,
+        driver: {
+          id: String(driver.id),
+          name: driver.name || 'Driver',
+          phone: driver.phone || 'N/A',
+          email: driver.email || 'N/A',
+          vehicleType: driver.vehicleType || 'mini'
+        }
+      };
+    });
+    
     drivers.sort((a, b) => a.distanceKm - b.distanceKm);
 
     // Fare estimation
-    const pricing = await Pricing.findOne({ vehicleType: vehicleType || 'mini', isActive: true }).sort({ updatedAt: -1 });
-    if (!pricing) {
-      return res.status(404).json({ message: `No pricing found for vehicle type: ${vehicleType || 'mini'}` });
+    let pricing;
+    try {
+      pricing = await Pricing.findOne({ vehicleType: vehicleType || 'mini', isActive: true }).sort({ updatedAt: -1 });
+      if (!pricing) {
+        return res.status(404).json({ message: `No pricing found for vehicle type: ${vehicleType || 'mini'}` });
+      }
+    } catch (error) {
+      console.error('Error finding pricing in discoverAndEstimate:', error);
+      return res.status(500).json({ message: `Database error: ${error.message}` });
     }
 
     const distanceKmVal = geolib.getDistance(
@@ -508,5 +573,80 @@ async function discoverAndEstimate(req, res) {
   }
 }
 
+// Debug endpoint for testing location matching
+async function debugLocation(req, res) {
+  try {
+    const { latitude, longitude, radiusKm = 5 } = req.query;
+    
+    if (!latitude || !longitude) {
+      return res.status(400).json({ message: 'latitude and longitude are required' });
+    }
+    
+    const passengerLat = parseFloat(latitude);
+    const passengerLon = parseFloat(longitude);
+    const searchRadius = parseFloat(radiusKm);
+    
+    console.log(`🔍 DEBUG: Testing location matching for passenger at ${passengerLat}, ${passengerLon} within ${searchRadius}km`);
+    
+    // Get all drivers from external service only
+    const { listDrivers } = require('../services/userDirectory');
+    const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
+    
+    let externalDrivers = [];
+    try {
+      externalDrivers = await listDrivers({}, { headers: authHeader });
+      console.log(`📊 DEBUG: Found ${externalDrivers.length} total drivers from external service`);
+    } catch (error) {
+      console.error('❌ DEBUG: Failed to fetch drivers from external service:', error.message);
+      return res.status(500).json({ message: 'Failed to fetch drivers from external service' });
+    }
+    
+    const availableDrivers = externalDrivers.filter(d => d.available);
+    console.log(`📊 DEBUG: Found ${availableDrivers.length} available drivers`);
+    
+    const driversWithLocation = availableDrivers.filter(d => {
+      const location = d.location || d.lastKnownLocation;
+      return location && location.latitude && location.longitude;
+    });
+    console.log(`📊 DEBUG: Found ${driversWithLocation.length} available drivers with location data`);
+    
+    const nearbyDrivers = driversWithLocation.filter(d => {
+      const location = d.location || d.lastKnownLocation;
+      const distance = distanceKm(location, { latitude: passengerLat, longitude: passengerLon });
+      console.log(`📍 DEBUG: Driver ${d.id} (${d.name || 'No name'}) at ${location.latitude}, ${location.longitude} - distance: ${distance.toFixed(2)}km`);
+      return distance <= searchRadius;
+    });
+    
+    console.log(`✅ DEBUG: Found ${nearbyDrivers.length} drivers within ${searchRadius}km`);
+    
+    const response = {
+      passengerLocation: { latitude: passengerLat, longitude: passengerLon },
+      searchRadius: searchRadius,
+      totalDrivers: externalDrivers.length,
+      availableDrivers: availableDrivers.length,
+      driversWithLocation: driversWithLocation.length,
+      nearbyDrivers: nearbyDrivers.length,
+      drivers: nearbyDrivers.map(d => {
+        const location = d.location || d.lastKnownLocation;
+        return {
+          id: String(d.id),
+          name: d.name || 'No name',
+          phone: d.phone || 'No phone',
+          vehicleType: d.vehicleType,
+          available: d.available,
+          location: location,
+          distanceKm: distanceKm(location, { latitude: passengerLat, longitude: passengerLon })
+        };
+      })
+    };
+    
+    return res.json(response);
+  } catch (e) {
+    console.error('DEBUG ERROR:', e);
+    return res.status(500).json({ message: `Debug failed: ${e.message}` });
+  }
+}
+
 module.exports.discoverAndEstimate = discoverAndEstimate;
+module.exports.debugLocation = debugLocation;
 

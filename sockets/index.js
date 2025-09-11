@@ -1,3 +1,8 @@
+const { Booking } = require('../models/bookingModels');
+const { Pricing } = require('../models/pricing');
+const geolib = require('geolib');
+const { authenticateSocket } = require('./socketAuth');
+
 let ioRef;
 
 function attachSocketHandlers(io) {
@@ -6,10 +11,6 @@ function attachSocketHandlers(io) {
     // Passenger creates a booking request
     socket.on('booking_request', async (payload) => {
       try {
-        const { Booking } = require('../models/bookingModels');
-        const { Pricing } = require('../models/pricing');
-        const geolib = require('geolib');
-        const { authenticateSocket } = require('./socketAuth');
 
         const user = await authenticateSocket(socket);
         if (!user || user.type !== 'passenger') {
@@ -27,7 +28,13 @@ function attachSocketHandlers(io) {
           { latitude: pickup.latitude, longitude: pickup.longitude },
           { latitude: dropoff.latitude, longitude: dropoff.longitude }
         ) / 1000;
-        const pricing = await Pricing.findOne({ vehicleType: payload?.vehicleType || 'mini', isActive: true }).sort({ updatedAt: -1 });
+        let pricing;
+        try {
+          pricing = await Pricing.findOne({ vehicleType: payload?.vehicleType || 'mini', isActive: true }).sort({ updatedAt: -1 });
+        } catch (error) {
+          console.error('Error finding pricing in socket:', error);
+          pricing = null;
+        }
         const p = pricing || { baseFare: 2, perKm: 1, perMinute: 0, waitingPerMinute: 0, surgeMultiplier: 1 };
         const fareBreakdown = {
           base: p.baseFare,
