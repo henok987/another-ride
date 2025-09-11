@@ -88,5 +88,3 @@ function broadcast(event, data) {
 
 module.exports = { attachSocketHandlers, broadcast };
 
-module.exports = { attachSocketHandlers, broadcast };
-

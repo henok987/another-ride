@@ -1,7 +1,7 @@
 {
   "name": "express-mongo-cab",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "server.js",
   "engines": {
     "node": ">=18"
   },
