@@ -218,21 +218,27 @@ async function availableNearby(req, res) {
         }
       } catch (_) {}
 
+      // Only return drivers with real external data (name, phone, email all present)
+      if (!name || !phone || !email) {
+        return null;
+      }
+
       const driverInfo = {
         id: String(driver._id),
-        name: name || '',
-        phone: phone || '',
-        email: email || '',
+        name: name,
+        phone: phone,
+        email: email,
         vehicleType: driver.vehicleType
       };
 
       return { ...base, driver: driverInfo };
     }));
 
-    // Sort by distance (closest first)
-    enriched.sort((a, b) => a.distanceKm - b.distanceKm);
+    // Remove nulls and sort by distance (closest first)
+    const filtered = enriched.filter(Boolean);
+    filtered.sort((a, b) => a.distanceKm - b.distanceKm);
 
-    return res.json(enriched);
+    return res.json(filtered);
   } catch (e) { return res.status(500).json({ message: `Failed to find nearby drivers: ${e.message}` }); }
 }
 
