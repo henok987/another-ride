@@ -46,8 +46,22 @@ function readTextIfPath(maybePath) {
   return null;
 }
 
+function convertSec1ToPkcs8(sec1Pem) {
+  try {
+    // Import as SEC1 first
+    const sec1Key = crypto.createPrivateKey({ key: sec1Pem, format: 'pem', type: 'sec1' });
+    // Export as PKCS8
+    return sec1Key.export({ type: 'pkcs8', format: 'pem' });
+  } catch (err) {
+    return null;
+  }
+}
+
 function importPrivateKey(pem, options = {}) {
   const normalized = normalizePemString(pem);
+  console.log('🔑 Loading private key, normalized length:', normalized.length);
+  console.log('🔑 Key starts with:', normalized.substring(0, 50) + '...');
+  
   // Support JWK in env (stringified JSON)
   const trimmed = String(pem || '').trim();
   if (trimmed.startsWith('{')) {
@@ -58,13 +72,16 @@ function importPrivateKey(pem, options = {}) {
       // fallthrough to PEM attempts below
     }
   }
+  
   // Try Node auto-detection first
   let lastError;
   try {
     return crypto.createPrivateKey({ key: normalized, format: 'pem', passphrase: options.passphrase });
   } catch (err) {
     lastError = err;
+    console.log('🔑 Auto-detection failed:', err.message);
   }
+  
   // Try explicit types
   const candidates = [
     { type: 'pkcs8', format: 'pem' },
@@ -75,8 +92,23 @@ function importPrivateKey(pem, options = {}) {
       return crypto.createPrivateKey({ key: normalized, format: opts.format, type: opts.type, passphrase: options.passphrase });
     } catch (err) {
       lastError = err;
+      console.log(`🔑 ${opts.type} failed:`, err.message);
     }
   }
+  
+  // Try converting SEC1 to PKCS8 if it's a SEC1 key
+  if (/BEGIN EC PRIVATE KEY/.test(normalized)) {
+    console.log('🔑 Attempting SEC1 to PKCS8 conversion...');
+    const pkcs8Pem = convertSec1ToPkcs8(normalized);
+    if (pkcs8Pem) {
+      try {
+        return crypto.createPrivateKey({ key: pkcs8Pem, format: 'pem', type: 'pkcs8' });
+      } catch (err) {
+        console.log('🔑 PKCS8 conversion failed:', err.message);
+      }
+    }
+  }
+  
   // Provide actionable diagnostics
   if (/BEGIN RSA PRIVATE KEY/.test(normalized)) {
     throw new Error('Failed to import private key: RSA key provided. ES256 requires an EC P-256 key.');
