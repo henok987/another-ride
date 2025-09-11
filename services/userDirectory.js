@@ -33,13 +33,15 @@ async function getPassengerById(passengerId) {
 
 module.exports = { getPassengerById };
 
-async function getDriverById(driverId) {
+async function getDriverById(driverId, options = undefined) {
   try {
     const template = process.env.DRIVER_LOOKUP_URL_TEMPLATE; // e.g. https://authservice.../api/drivers/{id}
     if (!fetchFn || !template || !driverId) return null;
     const url = buildUrlFromTemplate(template, { id: driverId });
     const headers = { 'Accept': 'application/json' };
-    if (process.env.AUTH_SERVICE_BEARER) headers['Authorization'] = `Bearer ${process.env.AUTH_SERVICE_BEARER}`;
+    const authHeader = options && options.headers && options.headers.Authorization ? options.headers.Authorization : undefined;
+    if (authHeader) headers['Authorization'] = authHeader;
+    else if (process.env.AUTH_SERVICE_BEARER) headers['Authorization'] = `Bearer ${process.env.AUTH_SERVICE_BEARER}`;
     const res = await fetchFn(url, { headers });
     if (!res.ok) return null;
     const data = await safeJson(res);
