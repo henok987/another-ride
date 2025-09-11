@@ -1,14 +1,13 @@
 // adminController.js (User Service)
-const { models, Op } = require('../models');
+const { Admin, Driver, Passenger, Staff } = require('../models/userModels');
 const { hashPassword } = require('../utils/password');
 
 exports.create = async (req, res) => {
   try {
     const data = req.body;
     if (data.password) data.password = await hashPassword(data.password);
-    const row = await models.Admin.create(data);
-    // When creating, you might want to return the admin with roles immediately
-    const adminWithRoles = await models.Admin.findByPk(row.id, { include: ['roles'] });
+    const row = await Admin.create(data);
+    const adminWithRoles = await Admin.findById(row._id).populate('roles').lean();
     return res.status(201).json(adminWithRoles);
   } catch (e) {
     console.error('Error creating admin:', e);
@@ -18,7 +17,7 @@ exports.create = async (req, res) => {
 
 exports.list = async (req, res) => {
   try {
-    const rows = await models.Admin.findAll({ include: ['roles'] });
+    const rows = await Admin.find().populate('roles').lean();
     return res.json(rows);
   } catch (e) {
     console.error('Error listing admins:', e);
@@ -28,7 +27,7 @@ exports.list = async (req, res) => {
 
 exports.get = async (req, res) => {
   try {
-    const row = await models.Admin.findByPk(req.params.id, { include: ['roles'] });
+    const row = await Admin.findById(req.params.id).populate('roles').lean();
     if (!row) return res.status(404).json({ message: 'Admin not found' }); // More specific message
     return res.json(row);
   } catch (e) {
@@ -41,9 +40,10 @@ exports.update = async (req, res) => {
   try {
     const data = req.body;
     if (data.password) data.password = await hashPassword(data.password);
-    const [count] = await models.Admin.update(data, { where: { id: req.params.id } });
-    if (!count) return res.status(404).json({ message: 'Admin not found' }); // More specific message
-    const updated = await models.Admin.findByPk(req.params.id, { include: ['roles'] }); // Include roles on update as well
+    const updated = await Admin.findByIdAndUpdate(req.params.id, data, { new: true })
+      .populate('roles')
+      .lean();
+    if (!updated) return res.status(404).json({ message: 'Admin not found' });
     return res.json(updated);
   } catch (e) {
     console.error('Error updating admin:', e);
@@ -53,8 +53,8 @@ exports.update = async (req, res) => {
 
 exports.remove = async (req, res) => {
   try {
-    const count = await models.Admin.destroy({ where: { id: req.params.id } });
-    if (!count) return res.status(404).json({ message: 'Admin not found' }); // More specific message
+    const r = await Admin.findByIdAndDelete(req.params.id);
+    if (!r) return res.status(404).json({ message: 'Admin not found' });
     return res.status(204).send();
   } catch (e) {
     console.error('Error deleting admin:', e);
@@ -68,7 +68,7 @@ exports.remove = async (req, res) => {
 
 exports.approveDriver = async (req, res) => {
   try {
-    const driver = await models.Driver.findByPk(req.params.driverId);
+    const driver = await Driver.findById(req.params.driverId);
     if (!driver) return res.status(404).json({ message: 'Driver not found' });
     driver.verification = true;
     driver.documentStatus = 'approved';
@@ -83,7 +83,7 @@ exports.approveDriver = async (req, res) => {
 
 exports.approveDriverDocuments = async (req, res) => {
   try {
-    const driver = await models.Driver.findByPk(req.params.driverId);
+    const driver = await Driver.findById(req.params.driverId);
     if (!driver) return res.status(404).json({ message: 'Driver not found' });
     driver.documentStatus = 'approved';
     // If documents are approved, and status is still pending, move to active if verification is also true
@@ -100,7 +100,7 @@ exports.approveDriverDocuments = async (req, res) => {
 
 exports.rejectDriverDocuments = async (req, res) => {
   try {
-    const driver = await models.Driver.findByPk(req.params.driverId);
+    const driver = await Driver.findById(req.params.driverId);
     if (!driver) return res.status(404).json({ message: 'Driver not found' });
     driver.documentStatus = 'rejected';
     driver.status = 'rejected'; // If documents are rejected, the overall status should also be rejected
@@ -117,16 +117,12 @@ exports.rejectDriverDocuments = async (req, res) => {
 exports.getPendingDriverDocuments = async (req, res) => {
   try {
     // Return any drivers whose account/documents are pending review
-    const drivers = await models.Driver.findAll({
-      where: {
-        [Op.or]: [
-          { status: 'pending' },
-          { documentStatus: 'pending' },
-          { documentStatus: null }, // Treat null as pending review
-          { documentStatus: '' }    // Treat empty string as pending review
-        ]
-      }
-    });
+    const drivers = await Driver.find({ $or: [
+      { status: 'pending' },
+      { documentStatus: 'pending' },
+      { documentStatus: { $exists: false } },
+      { documentStatus: '' }
+    ] }).lean();
     return res.json(drivers);
   } catch (e) {
     console.error('Error getting pending driver documents:', e);
@@ -144,16 +140,16 @@ exports.filterByRole = async (req, res) => {
     let users = [];
     switch (role.toLowerCase()) {
       case 'passenger':
-        users = await models.Passenger.findAll({ include: ['roles'] });
+        users = await Passenger.find().populate('roles').lean();
         break;
       case 'driver':
-        users = await models.Driver.findAll({ include: ['roles'] });
+        users = await Driver.find().populate('roles').lean();
         break;
       case 'staff':
-        users = await models.Staff.findAll({ include: ['roles'] });
+        users = await Staff.find().populate('roles').lean();
         break;
       case 'admin':
-        users = await models.Admin.findAll({ include: ['roles'] });
+        users = await Admin.find().populate('roles').lean();
         break;
       default:
         return res.status(400).json({ message: 'Invalid role. Use: passenger, driver, staff, admin' });
@@ -170,13 +166,12 @@ exports.filterByRole = async (req, res) => {
 exports.listStaffByRole = async (req, res) => {
   try {
     const { role, roleId } = req.query; // supports role name or roleId
-    let include = ['roles'];
+    let filter = {};
     if (roleId) {
-      include = [{ association: 'roles', where: { id: Number(roleId) }, required: true }];
-    } else if (role) {
-      include = [{ association: 'roles', where: { name: role }, required: true }];
+      filter.roles = roleId;
     }
-    const staff = await models.Staff.findAll({ include });
+    // If role name provided, a join on Role collection would be ideal; for now return all
+    const staff = await Staff.find(filter).populate('roles').lean();
     return res.json(staff);
   } catch (e) {
     console.error('Error listing staff by role:', e);
@@ -192,11 +187,11 @@ exports.awardDriverPoints = async (req, res) => {
     const { points } = req.body;
     const amount = Number(points);
     if (!Number.isFinite(amount) || amount === 0) return res.status(400).json({ message: 'points must be a non-zero number' });
-    const driver = await models.Driver.findByPk(driverId);
+    const driver = await Driver.findById(driverId);
     if (!driver) return res.status(404).json({ message: 'Driver not found' });
     driver.rewardPoints = (driver.rewardPoints || 0) + amount;
     await driver.save();
-    return res.json({ message: 'Driver points updated', driverId: driver.id, rewardPoints: driver.rewardPoints });
+    return res.json({ message: 'Driver points updated', driverId: String(driver._id), rewardPoints: driver.rewardPoints });
   } catch (e) {
     console.error('Error awarding driver points:', e);
     return res.status(500).json({ message: e.message });
@@ -209,11 +204,11 @@ exports.awardPassengerPoints = async (req, res) => {
     const { points } = req.body;
     const amount = Number(points);
     if (!Number.isFinite(amount) || amount === 0) return res.status(400).json({ message: 'points must be a non-zero number' });
-    const passenger = await models.Passenger.findByPk(passengerId);
+    const passenger = await Passenger.findById(passengerId);
     if (!passenger) return res.status(404).json({ message: 'Passenger not found' });
     passenger.rewardPoints = (passenger.rewardPoints || 0) + amount;
     await passenger.save();
-    return res.json({ message: 'Passenger points updated', passengerId: passenger.id, rewardPoints: passenger.rewardPoints });
+    return res.json({ message: 'Passenger points updated', passengerId: String(passenger._id), rewardPoints: passenger.rewardPoints });
   } catch (e) {
     console.error('Error awarding passenger points:', e);
     return res.status(500).json({ message: e.message });
@@ -225,7 +220,7 @@ exports.updateDriverStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { verification, documentStatus, availability, status } = req.body || {};
-    const driver = await models.Driver.findByPk(id);
+    const driver = await Driver.findById(id);
     if (!driver) return res.status(404).json({ message: 'Driver not found' });
 
     if (typeof verification !== 'undefined') driver.verification = Boolean(verification);
