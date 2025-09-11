@@ -46,6 +46,10 @@ const BookingSchema = new mongoose.Schema(
     },
     distanceKm: { type: Number },
 
+    // Payments
+    paymentMethod: { type: String, enum: ['cash','wallet','telebirr','cbe','card','santimpay'] },
+    transactionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Transaction' },
+
     // Timestamps for lifecycle
     acceptedAt: { type: Date },
     startedAt: { type: Date },
