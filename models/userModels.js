@@ -4,6 +4,7 @@ const RoleSchema = new mongoose.Schema({ name: { type: String, required: true, u
 const PermissionSchema = new mongoose.Schema({ name: { type: String, required: true, unique: true } }, { timestamps: true });
 
 const PassengerSchema = new mongoose.Schema({
+  externalId: { type: String, index: true },
   name: { type: String, required: true },
   phone: { type: String, index: true, unique: true },
   email: { type: String, index: true, unique: true },
@@ -72,6 +73,7 @@ DriverSchema.index(
 );
 
 const StaffSchema = new mongoose.Schema({
+  externalId: { type: String, index: true },
   fullName: { type: String, required: true },
   username: { type: String, required: true, unique: true },
   password: { type: String, required: true },
@@ -90,6 +92,7 @@ StaffSchema.set('toJSON', {
 });
 
 const AdminSchema = new mongoose.Schema({
+  externalId: { type: String, index: true },
   fullName: { type: String, required: true },
   username: { type: String, required: true, unique: true },
   password: { type: String, required: true },

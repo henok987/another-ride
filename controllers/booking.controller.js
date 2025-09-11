@@ -202,6 +202,17 @@ exports.list = async (req, res) => {
       console.log('Extracted JWT passenger info:', jwtPassengerInfo);
     }
 
+    const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
+    const driverIds = [...new Set(rows.map(r => r.driverId).filter(Boolean))];
+    let driverInfoMap = {};
+    if (driverIds.length) {
+      try {
+        const { getDriversByIds } = require('../services/userDirectory');
+        const infos = await getDriversByIds(driverIds, { headers: authHeader });
+        driverInfoMap = Object.fromEntries((infos || []).map(i => [String(i.id), { id: String(i.id), name: i.name, phone: i.phone }]));
+      } catch (_) {}
+    }
+
     const normalized = rows.map(b => {
       // Priority order: JWT token data > Stored booking data > Database lookup > External
       let passenger = undefined;
@@ -230,10 +241,13 @@ exports.list = async (req, res) => {
       
       console.log(`Final passenger for booking ${b._id}:`, passenger);
       
+      const driverBasic = b.driverId ? driverInfoMap[String(b.driverId)] || undefined : undefined;
       return {
       id: String(b._id),
       passengerId: b.passengerId,
         passenger: passenger,
+      driverId: b.driverId,
+      driver: driverBasic,
       vehicleType: b.vehicleType,
       pickup: b.pickup,
       dropoff: b.dropoff,
