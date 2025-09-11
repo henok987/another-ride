@@ -159,9 +159,10 @@ async function availableNearby(req, res) {
     const { latitude, longitude, radiusKm = 5, vehicleType } = req.query;
     const all = await Driver.find({ available: true, ...(vehicleType ? { vehicleType } : {}) });
     const nearby = all.filter(d => d.lastKnownLocation && distanceKm(d.lastKnownLocation, { latitude: +latitude, longitude: +longitude }) <= +radiusKm);
-    
-    // Enhanced driver information for passengers - use local data first, then JWT if available
-    const response = nearby.map((driver) => {
+
+    // Enrich driver info with external user directory if local name/phone are missing
+    const { getDriverById } = require('../services/userDirectory');
+    const enriched = await Promise.all(nearby.map(async (driver) => {
       const base = {
         id: String(driver._id),
         driverId: String(driver._id),
@@ -174,23 +175,35 @@ async function availableNearby(req, res) {
         },
         distanceKm: distanceKm(driver.lastKnownLocation, { latitude: +latitude, longitude: +longitude })
       };
-      
-      // Use local driver data only; no generic fallback
+
+      let name = driver.name || undefined;
+      let phone = driver.phone || undefined;
+      let email = driver.email || undefined;
+      if (!name || !phone) {
+        try {
+          const ext = await getDriverById(String(driver._id));
+          if (ext) {
+            name = name || ext.name;
+            phone = phone || ext.phone;
+          }
+        } catch (_) {}
+      }
+
       const driverInfo = {
         id: String(driver._id),
-        name: driver.name,
-        phone: driver.phone,
-        email: driver.email,
+        name: name || '',
+        phone: phone || '',
+        email: email || '',
         vehicleType: driver.vehicleType
       };
-      
+
       return { ...base, driver: driverInfo };
-    });
-    
+    }));
+
     // Sort by distance (closest first)
-    response.sort((a, b) => a.distanceKm - b.distanceKm);
-    
-    return res.json(response);
+    enriched.sort((a, b) => a.distanceKm - b.distanceKm);
+
+    return res.json(enriched);
   } catch (e) { return res.status(500).json({ message: `Failed to find nearby drivers: ${e.message}` }); }
 }
 
@@ -364,8 +377,9 @@ async function discoverAndEstimate(req, res) {
     const all = await Driver.find({ available: true, ...(vehicleType ? { vehicleType } : {}) });
     const nearby = all.filter(d => d.lastKnownLocation && distanceKm(d.lastKnownLocation, { latitude: +pickup.latitude, longitude: +pickup.longitude }) <= +radiusKm);
 
-    // Use local driver data only
-    const drivers = nearby.map((driver) => {
+    // Enrich driver data with external user directory when missing
+    const { getDriverById } = require('../services/userDirectory');
+    const drivers = await Promise.all(nearby.map(async (driver) => {
       const base = {
         id: String(driver._id),
         driverId: String(driver._id),
@@ -374,18 +388,30 @@ async function discoverAndEstimate(req, res) {
         lastKnownLocation: driver.lastKnownLocation || null,
         distanceKm: distanceKm(driver.lastKnownLocation, { latitude: +pickup.latitude, longitude: +pickup.longitude })
       };
-      
-      // Use local driver data only; no generic fallback
+
+      let name = driver.name || undefined;
+      let phone = driver.phone || undefined;
+      let email = driver.email || undefined;
+      if (!name || !phone) {
+        try {
+          const ext = await getDriverById(String(driver._id));
+          if (ext) {
+            name = name || ext.name;
+            phone = phone || ext.phone;
+          }
+        } catch (_) {}
+      }
+
       const driverInfo = {
         id: String(driver._id),
-        name: driver.name,
-        phone: driver.phone,
-        email: driver.email,
+        name: name || '',
+        phone: phone || '',
+        email: email || '',
         vehicleType: driver.vehicleType
       };
-      
+
       return { ...base, driver: driverInfo };
-    });
+    }));
     drivers.sort((a, b) => a.distanceKm - b.distanceKm);
 
     // Fare estimation
