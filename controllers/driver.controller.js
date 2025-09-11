@@ -540,7 +540,7 @@ module.exports.getLocation = async function getLocation(req, res) {
     const d = await Driver.findById(driverId).lean();
     if (!d) return res.status(404).json({ message: 'Driver not found' });
 
-    const { getDriverById } = require('../services/userDirectory');
+    const { getDriverById } = require('../integrations/userServiceClient');
     const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
     const lookupId = String(d.externalId || driverId);
     const ext = await getDriverById(lookupId, { headers: authHeader });
@@ -576,9 +576,10 @@ module.exports.getAvailability = async function getAvailability(req, res) {
     const d = await Driver.findById(driverId).lean();
     if (!d) return res.status(404).json({ message: 'Driver not found' });
 
-    const { getDriverById } = require('../services/userDirectory');
+    const { getDriverById } = require('../integrations/userServiceClient');
     const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
-    const ext = await getDriverById(driverId, { headers: authHeader });
+    const lookupIdAvail = String(d.externalId || driverId);
+    const ext = await getDriverById(lookupIdAvail, { headers: authHeader });
 
     return res.json({
       id: String(d._id),
