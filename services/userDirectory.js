@@ -12,13 +12,36 @@ async function safeJson(res) {
   try { return await res.json(); } catch (_) { return null; }
 }
 
-async function getPassengerById(passengerId) {
+// Local models for optional enrichment/persistence
+let PassengerModel, DriverModel, StaffModel, AdminModel;
+try {
+  const models = require('../models/userModels');
+  PassengerModel = models.Passenger;
+  DriverModel = models.Driver;
+  StaffModel = models.Staff;
+  AdminModel = models.Admin;
+} catch (_) { /* optional */ }
+
+async function getPassengerById(passengerId, options = undefined) {
   try {
     const template = process.env.PASSENGER_LOOKUP_URL_TEMPLATE; // e.g. https://authservice.../api/passengers/{id}
     if (!fetchFn || !template || !passengerId) return null;
+
+    // Try local first if model available
+    if (PassengerModel) {
+      try {
+        const local = await PassengerModel.findById(passengerId).lean();
+        if (local && (local.name || local.phone)) {
+          return { id: String(local._id), name: local.name, phone: local.phone, email: local.email };
+        }
+      } catch (_) {}
+    }
+
     const url = buildUrlFromTemplate(template, { id: passengerId });
     const headers = { 'Accept': 'application/json' };
-    if (process.env.AUTH_SERVICE_BEARER) headers['Authorization'] = `Bearer ${process.env.AUTH_SERVICE_BEARER}`;
+    const authHeader = options && options.headers && options.headers.Authorization ? options.headers.Authorization : undefined;
+    if (authHeader) headers['Authorization'] = authHeader;
+    else if (process.env.AUTH_SERVICE_BEARER) headers['Authorization'] = `Bearer ${process.env.AUTH_SERVICE_BEARER}`;
     const res = await fetchFn(url, { headers });
     if (!res.ok) return null;
     const data = await safeJson(res);
@@ -27,7 +50,19 @@ async function getPassengerById(passengerId) {
     const candidate = data.data || data.user || data.passenger || data.account || data;
     const name = candidate.name || candidate.fullName || candidate.fullname || (candidate.profile && candidate.profile.name) || undefined;
     const phone = candidate.phone || candidate.phoneNumber || candidate.mobile || candidate.msisdn || (candidate.contact && candidate.contact.phone) || (candidate.profile && candidate.profile.phone) || undefined;
-    return { id: passengerId, name, phone };
+    const email = candidate.email || (candidate.profile && candidate.profile.email) || undefined;
+
+    // Upsert locally if model is available
+    if (PassengerModel) {
+      try {
+        await PassengerModel.findOneAndUpdate(
+          { _id: String(passengerId) },
+          { name, phone, email, externalId: String(passengerId) },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+      } catch (_) {}
+    }
+    return { id: String(passengerId), name, phone, email };
   } catch (_) { return null; }
 }
 
@@ -53,7 +88,19 @@ async function getDriverById(driverId, options = undefined) {
     const candidate = data.data || data.user || data.driver || data.account || data;
     const name = candidate.name || candidate.fullName || candidate.fullname || (candidate.profile && candidate.profile.name) || undefined;
     const phone = candidate.phone || candidate.phoneNumber || candidate.mobile || candidate.msisdn || (candidate.contact && candidate.contact.phone) || (candidate.profile && candidate.profile.phone) || undefined;
-    return { id: driverId, name, phone };
+    const email = candidate.email || (candidate.profile && candidate.profile.email) || undefined;
+
+    // Upsert locally if model available
+    if (DriverModel) {
+      try {
+        await DriverModel.findOneAndUpdate(
+          { _id: String(driverId) },
+          { name, phone, email, externalId: String(driverId) },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+      } catch (_) {}
+    }
+    return { id: String(driverId), name, phone, email };
   } catch (_) { return null; }
 }
 

@@ -154,7 +154,7 @@ exports.list = async (req, res) => {
     const pidToPassenger = Object.fromEntries(passengers.map(p => [String(p._id), { id: String(p._id), name: p.name, phone: p.phone }]));
     console.log('Passenger mapping:', pidToPassenger);
     
-    // Enhanced passenger lookup for non-ObjectId passengerIds
+    // Enhanced passenger lookup for non-ObjectId passengerIds using external directory
     const nonObjectIdPassengerIds = passengerIds.filter(id => !Types.ObjectId.isValid(id));
     let additionalPassengers = {};
     if (nonObjectIdPassengerIds.length > 0) {
@@ -165,7 +165,8 @@ exports.list = async (req, res) => {
         const { getPassengerById } = require('../services/userDirectory');
         const additionalPassengerPromises = nonObjectIdPassengerIds.map(async (id) => {
           try {
-            const info = await getPassengerById(id);
+            const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
+            const info = await getPassengerById(id, { headers: authHeader });
             return info ? { id, info } : null;
           } catch (e) {
             console.log(`Failed to fetch passenger ${id} from external service:`, e.message);
