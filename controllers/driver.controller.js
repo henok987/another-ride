@@ -170,29 +170,64 @@ async function availableNearby(req, res) {
     
     console.log(`🔍 Searching for drivers near passenger at ${passengerLat}, ${passengerLon} within ${searchRadius}km`);
     
-    // Get drivers from local database (since external service doesn't have location data)
+    // Get drivers from local database (for location data)
     const localDrivers = await Driver.find({ 
       available: true, 
       ...(vehicleType ? { vehicleType } : {}) 
     }).lean();
     console.log(`📊 Found ${localDrivers.length} available drivers from local database`);
     
-    // Format local drivers to match expected structure
-    const allDrivers = localDrivers.map(driver => ({
-      id: String(driver._id),
-      name: driver.name,
-      phone: driver.phone,
-      email: driver.email,
-      vehicleType: driver.vehicleType,
-      available: driver.available,
-      rating: driver.rating,
-      lastKnownLocation: driver.lastKnownLocation
+    // Get driver details from external service
+    const { getDriverById } = require('../services/userDirectory');
+    const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
+    
+    // Enrich each driver with external service data
+    const enrichedDrivers = await Promise.all(localDrivers.map(async (driver) => {
+      let externalData = {};
+      
+      // Try to get driver info from external service
+      try {
+        const externalDriver = await getDriverById(String(driver._id), { headers: authHeader });
+        if (externalDriver) {
+          externalData = {
+            name: externalDriver.name || driver.name || 'Driver',
+            phone: externalDriver.phone || driver.phone || 'N/A',
+            email: externalDriver.email || driver.email || 'N/A'
+          };
+          
+          // Update local database with external data
+          try {
+            await Driver.findByIdAndUpdate(driver._id, {
+              $set: {
+                name: externalDriver.name || driver.name,
+                phone: externalDriver.phone || driver.phone,
+                email: externalDriver.email || driver.email
+              }
+            });
+          } catch (updateError) {
+            console.log(`⚠️ Could not update driver ${driver._id} with external data:`, updateError.message);
+          }
+        }
+      } catch (error) {
+        console.log(`⚠️ Could not fetch external data for driver ${driver._id}:`, error.message);
+      }
+      
+      return {
+        id: String(driver._id),
+        name: externalData.name || driver.name || 'Driver',
+        phone: externalData.phone || driver.phone || 'N/A',
+        email: externalData.email || driver.email || 'N/A',
+        vehicleType: driver.vehicleType,
+        available: driver.available,
+        rating: driver.rating,
+        lastKnownLocation: driver.lastKnownLocation
+      };
     }));
     
-    console.log(`📊 Total drivers available: ${allDrivers.length}`);
+    console.log(`📊 Total drivers available: ${enrichedDrivers.length}`);
     
     // Filter drivers by location and distance
-    const nearby = allDrivers.filter(driver => {
+    const nearby = enrichedDrivers.filter(driver => {
       // Check for location in both possible structures
       const location = driver.location || driver.lastKnownLocation;
       if (!location || !location.latitude || !location.longitude) {
@@ -449,29 +484,64 @@ async function discoverAndEstimate(req, res) {
     
     console.log(`🔍 Discover & Estimate: Searching for drivers near pickup at ${pickupLat}, ${pickupLon} within ${searchRadius}km`);
 
-    // Get drivers from local database (since external service doesn't have location data)
+    // Get drivers from local database (for location data)
     const localDrivers = await Driver.find({ 
       available: true, 
       ...(vehicleType ? { vehicleType } : {}) 
     }).lean();
     console.log(`📊 Found ${localDrivers.length} available drivers from local database`);
     
-    // Format local drivers to match expected structure
-    const allDrivers = localDrivers.map(driver => ({
-      id: String(driver._id),
-      name: driver.name,
-      phone: driver.phone,
-      email: driver.email,
-      vehicleType: driver.vehicleType,
-      available: driver.available,
-      rating: driver.rating,
-      lastKnownLocation: driver.lastKnownLocation
+    // Get driver details from external service
+    const { getDriverById } = require('../services/userDirectory');
+    const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
+    
+    // Enrich each driver with external service data
+    const enrichedDrivers = await Promise.all(localDrivers.map(async (driver) => {
+      let externalData = {};
+      
+      // Try to get driver info from external service
+      try {
+        const externalDriver = await getDriverById(String(driver._id), { headers: authHeader });
+        if (externalDriver) {
+          externalData = {
+            name: externalDriver.name || driver.name || 'Driver',
+            phone: externalDriver.phone || driver.phone || 'N/A',
+            email: externalDriver.email || driver.email || 'N/A'
+          };
+          
+          // Update local database with external data
+          try {
+            await Driver.findByIdAndUpdate(driver._id, {
+              $set: {
+                name: externalDriver.name || driver.name,
+                phone: externalDriver.phone || driver.phone,
+                email: externalDriver.email || driver.email
+              }
+            });
+          } catch (updateError) {
+            console.log(`⚠️ Could not update driver ${driver._id} with external data:`, updateError.message);
+          }
+        }
+      } catch (error) {
+        console.log(`⚠️ Could not fetch external data for driver ${driver._id}:`, error.message);
+      }
+      
+      return {
+        id: String(driver._id),
+        name: externalData.name || driver.name || 'Driver',
+        phone: externalData.phone || driver.phone || 'N/A',
+        email: externalData.email || driver.email || 'N/A',
+        vehicleType: driver.vehicleType,
+        available: driver.available,
+        rating: driver.rating,
+        lastKnownLocation: driver.lastKnownLocation
+      };
     }));
     
-    console.log(`📊 Total drivers available: ${allDrivers.length}`);
+    console.log(`📊 Total drivers available: ${enrichedDrivers.length}`);
     
     // Filter drivers by location and distance
-    const nearby = allDrivers.filter(driver => {
+    const nearby = enrichedDrivers.filter(driver => {
       // Check for location in both possible structures
       const location = driver.location || driver.lastKnownLocation;
       if (!location || !location.latitude || !location.longitude) {
