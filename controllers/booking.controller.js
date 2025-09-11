@@ -5,7 +5,7 @@ const { Booking, BookingAssignment, TripHistory } = require('../models/bookingMo
 const { Pricing } = require('../models/pricing');
 const { broadcast } = require('../sockets');
 const positionUpdateService = require('../services/positionUpdate');
-const { getPassengerDetails, getDriverDetails, getDriversByIds } = require('../services/userServiceClient');
+const { getPassengerDetails, getDriverDetails, getDriversByIds } = require('../integrations/userServiceClient');
 
 // --- Fare Estimation ---
 async function estimateFare({ vehicleType = 'mini', pickup, dropoff }) {

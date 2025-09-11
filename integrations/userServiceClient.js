@@ -73,4 +73,21 @@ module.exports = {
   getDriverDetails: (driverId) => getUserDetails(driverId, 'driver'),
   getStaffDetails: (staffId) => getUserDetails(staffId, 'staff'),
   getAdminDetails: (adminId) => getUserDetails(adminId, 'admin'),
+  /**
+   * Fetch multiple driver summaries by IDs. Expects User Service to support
+   * a batch endpoint like GET /drivers?ids=1,2,3 returning an array.
+   */
+  getDriversByIds: async (driverIds) => {
+    try {
+      const idsParam = (driverIds || []).map(String).join(',');
+      const response = await userServiceClient.get(`/drivers`, { params: { ids: idsParam } });
+      // Normalize to simple array of drivers
+      const list = Array.isArray(response.data) ? response.data : response.data?.data || [];
+      return list;
+    } catch (error) {
+      const err = handleUserServiceError(error, 'Failed to fetch drivers list.');
+      console.error(err.message);
+      return [];
+    }
+  }
 };
