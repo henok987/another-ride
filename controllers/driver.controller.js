@@ -218,8 +218,8 @@ async function availableNearby(req, res) {
         }
       } catch (_) {}
 
-      // Only return drivers with real external data (name, phone, email all present)
-      if (!name || !phone || !email) {
+      // Only return drivers with real external data (require name and phone; email optional)
+      if (!name || !phone) {
         return null;
       }
 
@@ -504,4 +504,39 @@ async function discoverAndEstimate(req, res) {
 }
 
 module.exports.discoverAndEstimate = discoverAndEstimate;
+
+// Get driver last known location with external service populated driver info
+module.exports.getLocation = async function getLocation(req, res) {
+  try {
+    const driverId = String(req.params.id || '');
+    if (!driverId) return res.status(400).json({ message: 'Invalid driver id' });
+    const d = await Driver.findById(driverId).lean();
+    if (!d) return res.status(404).json({ message: 'Driver not found' });
+
+    const { getDriverById } = require('../services/userDirectory');
+    const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
+    const ext = await getDriverById(String(driverId), { headers: authHeader });
+
+    const driverInfo = ext ? {
+      id: String(driverId),
+      name: ext.name,
+      phone: ext.phone,
+      email: ext.email
+    } : { id: String(driverId), name: '', phone: '', email: '' };
+
+    return res.json({
+      id: String(d._id),
+      driverId: String(d._id),
+      available: !!d.available,
+      vehicleType: d.vehicleType,
+      lastKnownLocation: d.lastKnownLocation || null,
+      rating: d.rating || 5.0,
+      createdAt: d.createdAt,
+      updatedAt: d.updatedAt,
+      driver: driverInfo
+    });
+  } catch (e) {
+    return res.status(500).json({ message: e.message });
+  }
+};
 
