@@ -1,5 +1,5 @@
 const { TripHistory, Booking } = require('../models/bookingModels');
-const { getPassengerById, getDriverById } = require('../integrations/userService');
+const { getPassengerById, getDriverById } = require('../services/userDirectory');
 
 function toBasicUser(u) {
   if (!u) return undefined;
@@ -35,12 +35,13 @@ exports.list = async (req, res) => {
       Booking.find({ _id: { $in: bookingIds } }).select({ _id: 1, pickup: 1, dropoff: 1, vehicleType: 1, passengerName: 1, passengerPhone: 1 }).lean()
     ]);
     // Fetch from external user service in parallel
+    const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
     const passengerLookups = await Promise.all(passengerIds.map(async (id) => {
-      const info = await getPassengerById(id).catch(() => null);
+      const info = await getPassengerById(id, { headers: authHeader }).catch(() => null);
       return info ? [String(id), { id: String(id), name: info.name, phone: info.phone }] : null;
     }));
     const driverLookups = await Promise.all(driverIds.map(async (id) => {
-      const info = await getDriverById(id).catch(() => null);
+      const info = await getDriverById(id, { headers: authHeader }).catch(() => null);
       return info ? [String(id), { id: String(id), name: info.name, phone: info.phone }] : null;
     }));
     const pidMap = Object.fromEntries(passengerLookups.filter(Boolean));
@@ -88,9 +89,10 @@ exports.get = async (req, res) => {
     const r = await TripHistory.findById(req.params.id).lean();
     if (!r) return res.status(404).json({ message: 'Trip not found' });
 
+    const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
     const [p, d, b] = await Promise.all([
-      r.passengerId ? getPassengerById(r.passengerId).catch(() => null) : null,
-      r.driverId ? getDriverById(r.driverId).catch(() => null) : null,
+      r.passengerId ? getPassengerById(r.passengerId, { headers: authHeader }).catch(() => null) : null,
+      r.driverId ? getDriverById(r.driverId, { headers: authHeader }).catch(() => null) : null,
       r.bookingId ? Booking.findById(r.bookingId).select({ _id: 1, pickup: 1, dropoff: 1, vehicleType: 1, passengerName: 1, passengerPhone: 1 }).lean() : null
     ]);
 

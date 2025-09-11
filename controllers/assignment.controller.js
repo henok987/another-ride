@@ -1,5 +1,5 @@
 const { BookingAssignment, Booking } = require('../models/bookingModels');
-const { getPassengerDetails, getDriverDetails } = require('../integrations/userServiceClient');
+const { getPassengerById, getDriverById } = require('../services/userDirectory');
 
 function toBasicUser(u) {
   if (!u) return undefined;
@@ -43,17 +43,16 @@ exports.list = async (req, res) => {
     ]);
 
     // Fetch from external user service in parallel
+    const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
     const passengerLookups = await Promise.all(passengerIds.map(async (id) => {
       try {
-        const res = await getPassengerDetails(id);
-        const info = res && res.success ? res.user : null;
+        const info = await getPassengerById(id, { headers: authHeader });
         return info ? [String(id), { id: String(id), name: info.name, phone: info.phone }] : null;
       } catch (_) { return null; }
     }));
     const driverLookups = await Promise.all(driverIds.map(async (id) => {
       try {
-        const res = await getDriverDetails(id);
-        const info = res && res.success ? res.user : null;
+        const info = await getDriverById(id, { headers: authHeader });
         return info ? [String(id), { id: String(id), name: info.name, phone: info.phone }] : null;
       } catch (_) { return null; }
     }));
@@ -102,13 +101,12 @@ exports.get = async (req, res) => {
     const r = await BookingAssignment.findById(req.params.id).lean();
     if (!r) return res.status(404).json({ message: 'Assignment not found' });
 
-    const [pRes, dRes, b] = await Promise.all([
-      r.passengerId ? getPassengerDetails(r.passengerId).catch(() => null) : null,
-      r.driverId ? getDriverDetails(r.driverId).catch(() => null) : null,
+    const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
+    const [p, d, b] = await Promise.all([
+      r.passengerId ? getPassengerById(r.passengerId, { headers: authHeader }).catch(() => null) : null,
+      r.driverId ? getDriverById(r.driverId, { headers: authHeader }).catch(() => null) : null,
       r.bookingId ? Booking.findById(r.bookingId).select({ _id: 1, status: 1, pickup: 1, dropoff: 1, vehicleType: 1, passengerName: 1, passengerPhone: 1 }).lean() : null
     ]);
-    const p = pRes && pRes.success ? pRes.user : null;
-    const d = dRes && dRes.success ? dRes.user : null;
 
     const data = {
       id: String(r._id),
