@@ -188,13 +188,15 @@ async function availableNearby(req, res) {
     
     // Filter drivers by location and distance
     const nearby = externalDrivers.filter(driver => {
-      if (!driver.location || !driver.location.latitude || !driver.location.longitude) {
-        console.log(`❌ Driver ${driver.id} has invalid location data:`, driver.location);
+      // Check for location in both possible structures
+      const location = driver.location || driver.lastKnownLocation;
+      if (!location || !location.latitude || !location.longitude) {
+        console.log(`❌ Driver ${driver.id} has invalid location data:`, location);
         return false;
       }
       
-      const distance = distanceKm(driver.location, { latitude: passengerLat, longitude: passengerLon });
-      console.log(`📍 Driver ${driver.id} (${driver.name || 'No name'}) at ${driver.location.latitude}, ${driver.location.longitude} - distance: ${distance.toFixed(2)}km`);
+      const distance = distanceKm(location, { latitude: passengerLat, longitude: passengerLon });
+      console.log(`📍 Driver ${driver.id} (${driver.name || 'No name'}) at ${location.latitude}, ${location.longitude} - distance: ${distance.toFixed(2)}km`);
       
       return distance <= searchRadius;
     });
@@ -203,7 +205,8 @@ async function availableNearby(req, res) {
 
     // Format response
     const enriched = nearby.map(driver => {
-      const distance = distanceKm(driver.location, { latitude: passengerLat, longitude: passengerLon });
+      const location = driver.location || driver.lastKnownLocation;
+      const distance = distanceKm(location, { latitude: passengerLat, longitude: passengerLon });
       
       return {
         id: String(driver.id),
@@ -211,9 +214,9 @@ async function availableNearby(req, res) {
         vehicleType: driver.vehicleType || 'mini',
         rating: driver.rating || 5.0,
         lastKnownLocation: {
-          latitude: driver.location.latitude,
-          longitude: driver.location.longitude,
-          bearing: driver.location.bearing || null
+          latitude: location.latitude,
+          longitude: location.longitude,
+          bearing: location.bearing || null
         },
         distanceKm: distance,
         driver: {
@@ -459,13 +462,15 @@ async function discoverAndEstimate(req, res) {
     
     // Filter drivers by location and distance
     const nearby = externalDrivers.filter(driver => {
-      if (!driver.location || !driver.location.latitude || !driver.location.longitude) {
-        console.log(`❌ Driver ${driver.id} has invalid location data:`, driver.location);
+      // Check for location in both possible structures
+      const location = driver.location || driver.lastKnownLocation;
+      if (!location || !location.latitude || !location.longitude) {
+        console.log(`❌ Driver ${driver.id} has invalid location data:`, location);
         return false;
       }
       
-      const distance = distanceKm(driver.location, { latitude: pickupLat, longitude: pickupLon });
-      console.log(`📍 Driver ${driver.id} (${driver.name || 'No name'}) at ${driver.location.latitude}, ${driver.location.longitude} - distance: ${distance.toFixed(2)}km`);
+      const distance = distanceKm(location, { latitude: pickupLat, longitude: pickupLon });
+      console.log(`📍 Driver ${driver.id} (${driver.name || 'No name'}) at ${location.latitude}, ${location.longitude} - distance: ${distance.toFixed(2)}km`);
       
       return distance <= searchRadius;
     });
@@ -474,7 +479,8 @@ async function discoverAndEstimate(req, res) {
 
     // Format response
     const drivers = nearby.map(driver => {
-      const distance = distanceKm(driver.location, { latitude: pickupLat, longitude: pickupLon });
+      const location = driver.location || driver.lastKnownLocation;
+      const distance = distanceKm(location, { latitude: pickupLat, longitude: pickupLon });
       
       return {
         id: String(driver.id),
@@ -482,9 +488,9 @@ async function discoverAndEstimate(req, res) {
         vehicleType: driver.vehicleType || 'mini',
         rating: driver.rating || 5.0,
         lastKnownLocation: {
-          latitude: driver.location.latitude,
-          longitude: driver.location.longitude,
-          bearing: driver.location.bearing || null
+          latitude: location.latitude,
+          longitude: location.longitude,
+          bearing: location.bearing || null
         },
         distanceKm: distance,
         driver: {
@@ -570,12 +576,16 @@ async function debugLocation(req, res) {
     const availableDrivers = externalDrivers.filter(d => d.available);
     console.log(`📊 DEBUG: Found ${availableDrivers.length} available drivers`);
     
-    const driversWithLocation = availableDrivers.filter(d => d.location && d.location.latitude && d.location.longitude);
+    const driversWithLocation = availableDrivers.filter(d => {
+      const location = d.location || d.lastKnownLocation;
+      return location && location.latitude && location.longitude;
+    });
     console.log(`📊 DEBUG: Found ${driversWithLocation.length} available drivers with location data`);
     
     const nearbyDrivers = driversWithLocation.filter(d => {
-      const distance = distanceKm(d.location, { latitude: passengerLat, longitude: passengerLon });
-      console.log(`📍 DEBUG: Driver ${d.id} (${d.name || 'No name'}) at ${d.location.latitude}, ${d.location.longitude} - distance: ${distance.toFixed(2)}km`);
+      const location = d.location || d.lastKnownLocation;
+      const distance = distanceKm(location, { latitude: passengerLat, longitude: passengerLon });
+      console.log(`📍 DEBUG: Driver ${d.id} (${d.name || 'No name'}) at ${location.latitude}, ${location.longitude} - distance: ${distance.toFixed(2)}km`);
       return distance <= searchRadius;
     });
     
@@ -588,15 +598,18 @@ async function debugLocation(req, res) {
       availableDrivers: availableDrivers.length,
       driversWithLocation: driversWithLocation.length,
       nearbyDrivers: nearbyDrivers.length,
-      drivers: nearbyDrivers.map(d => ({
-        id: String(d.id),
-        name: d.name || 'No name',
-        phone: d.phone || 'No phone',
-        vehicleType: d.vehicleType,
-        available: d.available,
-        location: d.location,
-        distanceKm: distanceKm(d.location, { latitude: passengerLat, longitude: passengerLon })
-      }))
+      drivers: nearbyDrivers.map(d => {
+        const location = d.location || d.lastKnownLocation;
+        return {
+          id: String(d.id),
+          name: d.name || 'No name',
+          phone: d.phone || 'No phone',
+          vehicleType: d.vehicleType,
+          available: d.available,
+          location: location,
+          distanceKm: distanceKm(location, { latitude: passengerLat, longitude: passengerLon })
+        };
+      })
     };
     
     return res.json(response);
