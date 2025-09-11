@@ -249,12 +249,12 @@ exports.getDriverEarnings = async (req, res) => {
     }
 
     const earnings = await DriverEarnings.find({
-      driverId: driverIdFilter,
+      driverId: String(driverIdFilter),
       ...dateFilter
     }).populate('bookingId').sort({ tripDate: -1 });
 
     const summary = await DriverEarnings.aggregate([
-      { $match: { driverId: driverIdFilter, ...dateFilter } },
+      { $match: { driverId: String(driverIdFilter), ...dateFilter } },
       {
         $group: {
           _id: null,
