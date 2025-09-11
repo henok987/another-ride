@@ -11,5 +11,13 @@ router.get('/:id', authorize('admin','staff'), ctrl.get);
 router.put('/:id', authorize('admin','staff'), ctrl.update);
 router.delete('/:id', authorize('admin','staff'), ctrl.remove);
 
+// Passenger self endpoints
+router.get('/me/profile', authenticate, ctrl.getMyProfile);
+router.put('/me/profile', authenticate, ctrl.updateMyProfile);
+router.delete('/me', authenticate, ctrl.deleteMyAccount);
+
+// Passenger rates a driver
+router.post('/drivers/:driverId/rate', authenticate, ctrl.rateDriver);
+
 module.exports = router;
 
