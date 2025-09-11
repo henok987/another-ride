@@ -62,7 +62,7 @@ exports.create = async (req, res) => {
     
     if (!passengerName || !passengerPhone) {
       try {
-        const { getPassengerById } = require('../services/userDirectory');
+        const { getPassengerById } = require('../integrations/userServiceClient');
         const info = await getPassengerById(passengerId);
         if (info) {
           passengerName = passengerName || info.name;
@@ -207,7 +207,7 @@ exports.list = async (req, res) => {
     let driverInfoMap = {};
     if (driverIds.length) {
       try {
-        const { getDriversByIds } = require('../services/userDirectory');
+        const { getDriversByIds } = require('../integrations/userServiceClient');
         const infos = await getDriversByIds(driverIds, { headers: authHeader });
         driverInfoMap = Object.fromEntries((infos || []).map(i => [String(i.id), { id: String(i.id), name: i.name, phone: i.phone, email: i.email }]));
       } catch (_) {}

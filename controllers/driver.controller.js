@@ -91,7 +91,7 @@ async function setAvailability(req, res) {
     if (!d) return res.status(404).json({ message: 'Not found' });
     
     // Fetch driver information from external service (no JWT fallback)
-    const { getDriverById } = require('../services/userDirectory');
+    const { getDriverById } = require('../integrations/userServiceClient');
     const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
     const lookupIdAvail = String(d.externalId || driverId);
     const ext = await getDriverById(lookupIdAvail, { headers: authHeader });
@@ -140,7 +140,7 @@ async function updateLocation(req, res) {
     if (!d) return res.status(404).json({ message: 'Not found' });
     
     // Fetch driver information from external service (no JWT fallback)
-    const { getDriverById: getDriverByIdA } = require('../services/userDirectory');
+    const { getDriverById: getDriverByIdA } = require('../integrations/userServiceClient');
     const authHeaderA = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
     const lookupIdLoc = String(d.externalId || driverId);
     const extA = await getDriverByIdA(lookupIdLoc, { headers: authHeaderA });
@@ -181,7 +181,7 @@ async function availableNearby(req, res) {
     const nearby = all.filter(d => d.lastKnownLocation && distanceKm(d.lastKnownLocation, { latitude: +latitude, longitude: +longitude }) <= +radiusKm);
 
     // Enrich driver info via templated external user directory to target the correct API
-    const { getDriverById, getDriversByIds } = require('../services/userDirectory');
+    const { getDriverById, getDriversByIds } = require('../integrations/userServiceClient');
     const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
 
     // Prefetch external data in batch for better hit rate and performance

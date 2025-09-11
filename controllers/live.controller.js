@@ -77,7 +77,7 @@ async function push(req, res) {
     } else if (userType === 'driver' && item.driverId) {
       // Fetch driver info from external service (no JWT fallback)
       try {
-        const { getDriverById } = require('../services/userDirectory');
+        const { getDriverById } = require('../integrations/userServiceClient');
         const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
         const ext = await getDriverById(String(item.driverId), { headers: authHeader });
         userInfo = ext ? {

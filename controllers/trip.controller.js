@@ -1,5 +1,5 @@
 const { TripHistory, Booking } = require('../models/bookingModels');
-const { getPassengerById, getDriverById } = require('../services/userDirectory');
+const { getPassengerById, getDriverById } = require('../integrations/userServiceClient');
 
 function toBasicUser(u) {
   if (!u) return undefined;
