@@ -25,6 +25,7 @@ PassengerSchema.set('toJSON', {
 
 const DriverSchema = new mongoose.Schema({
   _id: { type: String, required: true },
+  externalId: { type: String, index: true },
   name: { type: String },
   phone: { type: String },
   email: { type: String },
