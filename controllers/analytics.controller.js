@@ -323,38 +323,28 @@ exports.getCommission = async (req, res) => {
 // Ride History
 exports.getRideHistory = async (req, res) => {
   try {
-    const userType = req.user.type;
-    const userId = req.user.id;
+    // Admin/staff only for global ride history
+    const role = String(req.user?.type || '').toLowerCase();
+    if (!['admin','superadmin','staff'].includes(role)) {
+      return res.status(403).json({ message: 'Forbidden: Admin or staff required' });
+    }
     const { page = 1, limit = 10, status } = req.query;
-
-    let query = {};
-    if (userType === 'driver') {
-      query.driverId = userId;
-    } else if (userType === 'passenger') {
-      query.passengerId = userId;
-    }
-
-    if (status) {
-      query.status = status;
-    }
-
+    const query = status ? { status } : {};
     const rides = await Booking.find(query)
-      .populate('driverId', 'name phone vehicleType')
-      .populate('passengerId', 'name phone')
       .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
-
-    const total = await Booking.countDocuments(query);
-
-    res.json({
-      rides,
-      pagination: {
-        current: parseInt(page),
-        pages: Math.ceil(total / limit),
-        total
-      }
-    });
+      .limit(parseInt(limit))
+      .skip((parseInt(page) - 1) * parseInt(limit))
+      .lean();
+    const minimal = rides.map(r => ({
+      id: String(r._id),
+      passengerId: r.passengerId && String(r.passengerId),
+      driverId: r.driverId && String(r.driverId),
+      status: r.status,
+      pickup: r.pickup,
+      dropoff: r.dropoff,
+      createdAt: r.createdAt
+    }));
+    res.json(minimal);
   } catch (e) {
     res.status(500).json({ message: `Failed to get ride history: ${e.message}` });
   }
@@ -363,34 +353,28 @@ exports.getRideHistory = async (req, res) => {
 // Get trip history by user ID (for user service integration)
 exports.getTripHistoryByUserId = async (req, res) => {
   try {
+    const role = String(req.user?.type || '').toLowerCase();
+    if (!['admin','superadmin','staff'].includes(role)) {
+      return res.status(403).json({ message: 'Forbidden: Admin or staff required' });
+    }
     const { userType, userId } = req.params;
     const { status } = req.query;
-
     if (!userType || !userId) {
       return res.status(400).json({ message: 'userType and userId are required' });
     }
-
-    if (userType !== 'driver' && userType !== 'passenger') {
-      return res.status(400).json({ message: 'userType must be either driver or passenger' });
-    }
-
-    let query = {};
-    if (userType === 'driver') {
-      query.driverId = userId;
-    } else if (userType === 'passenger') {
-      query.passengerId = userId;
-    }
-
-    if (status) {
-      query.status = status;
-    }
-
-    const trips = await Booking.find(query)
-      .populate('driverId', 'name phone vehicleType')
-      .populate('passengerId', 'name phone')
-      .sort({ createdAt: -1 });
-
-    res.json({ trips });
+    let query = userType === 'driver' ? { driverId: String(userId) } : { passengerId: String(userId) };
+    if (status) query.status = status;
+    const trips = await Booking.find(query).sort({ createdAt: -1 }).lean();
+    const minimal = trips.map(r => ({
+      id: String(r._id),
+      passengerId: r.passengerId && String(r.passengerId),
+      driverId: r.driverId && String(r.driverId),
+      status: r.status,
+      pickup: r.pickup,
+      dropoff: r.dropoff,
+      createdAt: r.createdAt
+    }));
+    res.json(minimal);
   } catch (e) {
     res.status(500).json({ message: `Failed to get trip history: ${e.message}` });
   }
