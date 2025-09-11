@@ -129,7 +129,7 @@ function getPrivateKeyMaterial() {
     const fromInlinePath = readTextIfPath(inline);
     return fromInlinePath || inline;
   }
-  throw new Error('Missing PRIVATE_KEY_IN_PEM or PRIVATE_KEY_FILE');
+  throw new Error('Missing PRIVATE_KEY_IN_PEM, PRIVATE_KEY_FILE, or PRIVATE_KEY_PATH');
 }
 
 async function generateSignedTokenForDirectPayment(amount, paymentReason, paymentMethod, phoneNumber) {
