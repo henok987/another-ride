@@ -65,6 +65,23 @@ function importPrivateKey(pem) {
   throw error;
 }
 
+function ensureEcP256PrivateKey(keyObject) {
+  try {
+    if (keyObject.asymmetricKeyType !== 'ec') {
+      throw new Error(`Invalid key type: ${keyObject.asymmetricKeyType}. ES256 requires EC.`);
+    }
+    const details = keyObject.asymmetricKeyDetails || {};
+    const curve = details.namedCurve || details.name;
+    if (curve && curve !== 'prime256v1' && curve !== 'P-256' && curve !== 'secp256r1') {
+      throw new Error(`Invalid EC curve: ${curve}. ES256 requires P-256 (prime256v1/secp256r1).`);
+    }
+  } catch (e) {
+    const error = new Error(`Failed to import private key. ${e.message}`);
+    error.cause = e;
+    throw error;
+  }
+}
+
 function signES256(payload, privateKeyPem) {
   const header = { alg: 'ES256', typ: 'JWT' };
   const encode = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64url');
@@ -73,6 +90,7 @@ function signES256(payload, privateKeyPem) {
   sign.update(unsigned);
   sign.end();
   const key = importPrivateKey(privateKeyPem);
+  ensureEcP256PrivateKey(key);
   const signature = sign.sign({ key, dsaEncoding: 'ieee-p1363' }).toString('base64url');
   return `${unsigned}.${signature}`;
 }
