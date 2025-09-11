@@ -162,9 +162,7 @@ async function availableNearby(req, res) {
 
     // Enrich driver info via userService (batch) if local name/phone are missing
     const userService = require('../integrations/userService');
-    const missingIds = nearby
-      .filter(d => !d.name || !d.phone)
-      .map(d => String(d._id));
+    const missingIds = nearby.map(d => String(d._id));
     let idToExternal = {};
     if (missingIds.length) {
       try {
@@ -189,8 +187,8 @@ async function availableNearby(req, res) {
         distanceKm: distanceKm(driver.lastKnownLocation, { latitude: +latitude, longitude: +longitude })
       };
 
-      let name = driver.name || idToExternal[String(driver._id)]?.name || undefined;
-      let phone = driver.phone || idToExternal[String(driver._id)]?.phone || undefined;
+      let name = idToExternal[String(driver._id)]?.name || driver.name || undefined;
+      let phone = idToExternal[String(driver._id)]?.phone || driver.phone || undefined;
       let email = driver.email || undefined;
 
       const driverInfo = {
@@ -383,9 +381,7 @@ async function discoverAndEstimate(req, res) {
 
     // Enrich driver data via userService (batch) when missing
     const userService = require('../integrations/userService');
-    const missingIds = nearby
-      .filter(d => !d.name || !d.phone)
-      .map(d => String(d._id));
+    const missingIds = nearby.map(d => String(d._id));
     let idToExternal = {};
     if (missingIds.length) {
       try {
@@ -406,8 +402,8 @@ async function discoverAndEstimate(req, res) {
         distanceKm: distanceKm(driver.lastKnownLocation, { latitude: +pickup.latitude, longitude: +pickup.longitude })
       };
 
-      let name = driver.name || idToExternal[String(driver._id)]?.name || undefined;
-      let phone = driver.phone || idToExternal[String(driver._id)]?.phone || undefined;
+      let name = idToExternal[String(driver._id)]?.name || driver.name || undefined;
+      let phone = idToExternal[String(driver._id)]?.phone || driver.phone || undefined;
       let email = driver.email || undefined;
 
       const driverInfo = {

@@ -70,8 +70,22 @@ class UserService {
       const response = await this.client.post(`${endpoint}/batch`, { ids: userIds });
       return response.data;
     } catch (error) {
-      console.error(`[UserService] Failed to get ${userType}s:`, error.message);
-      throw error;
+      console.error(`[UserService] Failed batch ${userType}s lookup:`, error.message);
+      // Fallback to per-id GETs to improve resilience
+      try {
+        const perId = await Promise.all(
+          (userIds || []).map(async (id) => {
+            try {
+              const u = await this.getUserById(id, userType);
+              return u ? u : null;
+            } catch (_) { return null; }
+          })
+        );
+        return perId.filter(Boolean);
+      } catch (e) {
+        console.error(`[UserService] Per-id ${userType}s lookup also failed:`, e.message);
+        throw error;
+      }
     }
   }
 
