@@ -1,6 +1,8 @@
 // driverController.js (User Service)
 const { Driver, Passenger } = require('../models/userModels');
 const { hashPassword } = require('../utils/password');
+const geolib = require('geolib');
+const { Pricing } = require('../models/pricing');
 
 exports.create = async (req, res) => {
   try {
@@ -264,6 +266,120 @@ exports.ratePassenger = async (req, res) => {
     return res.json({ message: 'Passenger rated successfully', passenger: updatedPassenger, rating: newRating, comment });
   } catch (e) {
     console.error('Error rating passenger:', e);
+    return res.status(500).json({ message: e.message });
+  }
+};
+
+// --- Additional handlers to match routes ---
+exports.availableNearby = async (req, res) => {
+  try {
+    const { latitude, longitude, radiusMeters = 5000 } = req.query;
+    let drivers = await Driver.find({ availability: true }).select({ _id: 1, name: 1, phone: 1, lastKnownLocation: 1, vehicleType: 1 }).lean();
+    if (latitude != null && longitude != null) {
+      const lat = Number(latitude);
+      const lng = Number(longitude);
+      const radius = Number(radiusMeters);
+      drivers = drivers.filter(d => d.lastKnownLocation && geolib.isPointWithinRadius(
+        { latitude: d.lastKnownLocation.latitude, longitude: d.lastKnownLocation.longitude },
+        { latitude: lat, longitude: lng },
+        radius
+      ));
+    }
+    return res.json(drivers.map(d => ({ id: String(d._id), name: d.name, phone: d.phone, vehicleType: d.vehicleType, lastKnownLocation: d.lastKnownLocation })));
+  } catch (e) {
+    return res.status(500).json({ message: e.message });
+  }
+};
+
+exports.setAvailability = async (req, res) => {
+  try {
+    if (req.user.type !== 'driver') return res.status(403).json({ message: 'Only drivers can change availability' });
+    const desired = req.body && typeof req.body.available === 'boolean' ? req.body.available : null;
+    const driver = await Driver.findById(req.user.id);
+    if (!driver) return res.status(404).json({ message: 'Driver not found' });
+    if (desired === null) {
+      driver.availability = !driver.availability;
+    } else {
+      driver.availability = desired;
+    }
+    await driver.save();
+    return res.json({ message: 'Availability updated', availability: driver.availability });
+  } catch (e) {
+    return res.status(500).json({ message: e.message });
+  }
+};
+
+exports.updateLocation = async (req, res) => {
+  try {
+    if (req.user.type !== 'driver') return res.status(403).json({ message: 'Only drivers can update location' });
+    const { latitude, longitude, bearing } = req.body || {};
+    if (latitude == null || longitude == null) return res.status(400).json({ message: 'latitude and longitude are required' });
+    const updated = await Driver.findByIdAndUpdate(req.user.id, { $set: { lastKnownLocation: { latitude: Number(latitude), longitude: Number(longitude), bearing: typeof bearing === 'number' ? bearing : undefined } } }, { new: true })
+      .select({ _id: 1, lastKnownLocation: 1 });
+    if (!updated) return res.status(404).json({ message: 'Driver not found' });
+    return res.json({ id: String(updated._id), lastKnownLocation: updated.lastKnownLocation });
+  } catch (e) {
+    return res.status(500).json({ message: e.message });
+  }
+};
+
+async function computeEstimate(vehicleType, pickup, dropoff) {
+  const distanceKm = geolib.getDistance(
+    { latitude: pickup.latitude, longitude: pickup.longitude },
+    { latitude: dropoff.latitude, longitude: dropoff.longitude }
+  ) / 1000;
+  const pricing = await Pricing.findOne({ vehicleType: vehicleType || 'mini', isActive: true }).sort({ updatedAt: -1 });
+  const p = pricing || { baseFare: 2, perKm: 1, perMinute: 0, waitingPerMinute: 0, surgeMultiplier: 1 };
+  const fareBreakdown = {
+    base: p.baseFare,
+    distanceCost: distanceKm * p.perKm,
+    timeCost: 0,
+    waitingCost: 0,
+    surgeMultiplier: p.surgeMultiplier
+  };
+  const fareEstimated = (fareBreakdown.base + fareBreakdown.distanceCost + fareBreakdown.timeCost + fareBreakdown.waitingCost) * fareBreakdown.surgeMultiplier;
+  return { distanceKm, fareEstimated, fareBreakdown };
+}
+
+exports.estimateFareForPassenger = async (req, res) => {
+  try {
+    const { vehicleType, pickup, dropoff } = req.body || {};
+    if (!pickup || !dropoff) return res.status(400).json({ message: 'pickup and dropoff are required' });
+    const est = await computeEstimate(vehicleType, pickup, dropoff);
+    return res.json(est);
+  } catch (e) {
+    return res.status(500).json({ message: e.message });
+  }
+};
+
+exports.estimateFareForDriver = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const { Booking } = require('../models/bookingModels');
+    const b = await Booking.findById(bookingId).lean();
+    if (!b) return res.status(404).json({ message: 'Booking not found' });
+    const est = await computeEstimate(b.vehicleType, b.pickup, b.dropoff);
+    return res.json(est);
+  } catch (e) {
+    return res.status(500).json({ message: e.message });
+  }
+};
+
+exports.discoverAndEstimate = async (req, res) => {
+  try {
+    const { pickup, dropoff, vehicleType } = req.body || {};
+    if (!pickup || !dropoff) return res.status(400).json({ message: 'pickup and dropoff are required' });
+    // find nearby available drivers
+    const radiusMeters = Number(req.body?.radiusMeters || 5000);
+    const all = await Driver.find({ availability: true }).select({ _id: 1, name: 1, phone: 1, lastKnownLocation: 1, vehicleType: 1 }).lean();
+    const nearby = all.filter(d => d.lastKnownLocation && geolib.isPointWithinRadius(
+      { latitude: d.lastKnownLocation.latitude, longitude: d.lastKnownLocation.longitude },
+      { latitude: pickup.latitude, longitude: pickup.longitude },
+      radiusMeters
+    ));
+    const est = await computeEstimate(vehicleType, pickup, dropoff);
+    return res.json({ nearby: nearby.map(d => ({ id: String(d._id), name: d.name, phone: d.phone, vehicleType: d.vehicleType })), estimate: est });
+  } catch (e) {
     return res.status(500).json({ message: e.message });
   }
 };
