@@ -1,0 +1,64 @@
+{
+  "info": {
+    "name": "Wallet & SantimPay APIs",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Wallet",
+      "item": [
+        {
+          "name": "Topup Wallet (SantimPay DirectPayment)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{passengerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/v1/wallet/topup", "host": ["{{baseUrl}}"], "path": ["v1","wallet","topup"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 100,\n  \"paymentMethod\": \"telebirr\",\n  \"phoneNumber\": \"+2519XXXXXXX\",\n  \"reason\": \"Wallet Topup\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Wallet Transactions",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{passengerToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/v1/wallet/transactions/{{passengerId}}", "host": ["{{baseUrl}}"], "path": ["v1","wallet","transactions","{{passengerId}}"] }
+          }
+        },
+        {
+          "name": "Driver Withdraw (B2C Payout)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{driverToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/v1/wallet/withdraw", "host": ["{{baseUrl}}"], "path": ["v1","wallet","withdraw"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 50,\n  \"destination\": \"+2519XXXXXXX\",\n  \"method\": \"santimpay\"\n}"
+            }
+          }
+        },
+        {
+          "name": "SantimPay Webhook (Callback)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/v1/wallet/webhook", "host": ["{{baseUrl}}"], "path": ["v1","wallet","webhook"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ID\": \"{{transactionId}}\",\n  \"Status\": \"SUCCESS\",\n  \"TxnId\": \"TX123\",\n  \"RefId\": \"REF123\",\n  \"Commission\": 1.5,\n  \"TotalAmount\": 101.5,\n  \"Msisdn\": \"+2519XXXXXXX\"\n}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
+
