@@ -89,6 +89,14 @@ async function setAvailability(req, res) {
     if (!driverId) return res.status(400).json({ message: 'Invalid driver id' });
     const d = await Driver.findByIdAndUpdate(driverId, { $set: { available: !!req.body.available } }, { new: true, upsert: true, setDefaultsOnInsert: true });
     if (!d) return res.status(404).json({ message: 'Not found' });
+    // Persist externalId mapping from JWT if present
+    try {
+      const jwtUserId = req.user && req.user.id ? String(req.user.id) : null;
+      if (jwtUserId && (!d.externalId || String(d.externalId) !== jwtUserId)) {
+        await Driver.findByIdAndUpdate(d._id, { $set: { externalId: jwtUserId } });
+        d.externalId = jwtUserId;
+      }
+    } catch (_) {}
     
     // Fetch driver information from external service (no JWT fallback)
     const { getDriverById } = require('../integrations/userServiceClient');
@@ -138,6 +146,14 @@ async function updateLocation(req, res) {
     
     const d = await Driver.findByIdAndUpdate(driverId, { $set: { lastKnownLocation: locationUpdate } }, { new: true, upsert: true, setDefaultsOnInsert: true });
     if (!d) return res.status(404).json({ message: 'Not found' });
+    // Persist externalId mapping from JWT if present
+    try {
+      const jwtUserId = req.user && req.user.id ? String(req.user.id) : null;
+      if (jwtUserId && (!d.externalId || String(d.externalId) !== jwtUserId)) {
+        await Driver.findByIdAndUpdate(d._id, { $set: { externalId: jwtUserId } });
+        d.externalId = jwtUserId;
+      }
+    } catch (_) {}
     
     // Fetch driver information from external service (no JWT fallback)
     const { getDriverById: getDriverByIdA } = require('../integrations/userServiceClient');
