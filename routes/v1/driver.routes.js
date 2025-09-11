@@ -31,5 +31,8 @@ router.get('/estimate-fare/:bookingId', authenticate, authorize('driver'), ctrl.
 // Combined discover + estimate
 router.post('/discover-and-estimate', authenticate, ctrl.discoverAndEstimate);
 
+// Debug endpoint for testing location matching
+router.get('/debug-location', authenticate, ctrl.debugLocation);
+
 module.exports = router;
 

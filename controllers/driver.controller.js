@@ -157,8 +157,34 @@ async function updateLocation(req, res) {
 async function availableNearby(req, res) {
   try {
     const { latitude, longitude, radiusKm = 5, vehicleType } = req.query;
+    
+    // Validate coordinates
+    if (!latitude || !longitude) {
+      return res.status(400).json({ message: 'latitude and longitude are required' });
+    }
+    
+    const passengerLat = parseFloat(latitude);
+    const passengerLon = parseFloat(longitude);
+    const searchRadius = parseFloat(radiusKm);
+    
+    console.log(`🔍 Searching for drivers near passenger at ${passengerLat}, ${passengerLon} within ${searchRadius}km`);
+    
     const all = await Driver.find({ available: true, ...(vehicleType ? { vehicleType } : {}) });
-    const nearby = all.filter(d => d.lastKnownLocation && distanceKm(d.lastKnownLocation, { latitude: +latitude, longitude: +longitude }) <= +radiusKm);
+    console.log(`📊 Found ${all.length} available drivers total`);
+    
+    const nearby = all.filter(d => {
+      if (!d.lastKnownLocation) {
+        console.log(`❌ Driver ${d._id} has no location data`);
+        return false;
+      }
+      
+      const distance = distanceKm(d.lastKnownLocation, { latitude: passengerLat, longitude: passengerLon });
+      console.log(`📍 Driver ${d._id} at ${d.lastKnownLocation.latitude}, ${d.lastKnownLocation.longitude} - distance: ${distance.toFixed(2)}km`);
+      
+      return distance <= searchRadius;
+    });
+    
+    console.log(`✅ Found ${nearby.length} drivers within ${searchRadius}km`);
 
     // Enrich driver info via templated external user directory to target the correct API
     const { getDriverById, getDriversByIds, listDrivers } = require('../services/userDirectory');
@@ -175,7 +201,7 @@ async function availableNearby(req, res) {
           longitude: driver.lastKnownLocation.longitude,
           bearing: driver.lastKnownLocation.bearing || null
         },
-        distanceKm: distanceKm(driver.lastKnownLocation, { latitude: +latitude, longitude: +longitude })
+        distanceKm: distanceKm(driver.lastKnownLocation, { latitude: passengerLat, longitude: passengerLon })
       };
 
       const lookupId = driver.externalId || driver._id;
@@ -235,14 +261,29 @@ async function availableNearby(req, res) {
 }
 
 function distanceKm(a, b) {
-  if (!a || !b || a.latitude == null || b.latitude == null) return Number.POSITIVE_INFINITY;
+  if (!a || !b || a.latitude == null || b.latitude == null || a.longitude == null || b.longitude == null) {
+    console.log('❌ Invalid coordinates for distance calculation:', { a, b });
+    return Number.POSITIVE_INFINITY;
+  }
+  
+  // Handle exact same location
+  if (a.latitude === b.latitude && a.longitude === b.longitude) {
+    return 0;
+  }
+  
   const toRad = (v) => (v * Math.PI) / 180;
-  const R = 6371;
+  const R = 6371; // Earth's radius in km
   const dLat = toRad(b.latitude - a.latitude);
   const dLon = toRad(b.longitude - a.longitude);
   const lat1 = toRad(a.latitude);
   const lat2 = toRad(b.latitude);
   const aHarv = Math.sin(dLat/2)**2 + Math.sin(dLon/2)**2 * Math.cos(lat1) * Math.cos(lat2);
+  
+  // Handle edge case where points are antipodal
+  if (aHarv >= 1) {
+    return Math.PI * R;
+  }
+  
   return 2 * R * Math.asin(Math.sqrt(aHarv));
 }
 
@@ -400,9 +441,29 @@ async function discoverAndEstimate(req, res) {
       return res.status(400).json({ message: 'Valid latitude and longitude are required for pickup and dropoff' });
     }
 
+    const pickupLat = parseFloat(pickup.latitude);
+    const pickupLon = parseFloat(pickup.longitude);
+    const searchRadius = parseFloat(radiusKm);
+    
+    console.log(`🔍 Discover & Estimate: Searching for drivers near pickup at ${pickupLat}, ${pickupLon} within ${searchRadius}km`);
+
     // Find nearby available drivers (reuse logic with minimal duplication)
     const all = await Driver.find({ available: true, ...(vehicleType ? { vehicleType } : {}) });
-    const nearby = all.filter(d => d.lastKnownLocation && distanceKm(d.lastKnownLocation, { latitude: +pickup.latitude, longitude: +pickup.longitude }) <= +radiusKm);
+    console.log(`📊 Found ${all.length} available drivers total`);
+    
+    const nearby = all.filter(d => {
+      if (!d.lastKnownLocation) {
+        console.log(`❌ Driver ${d._id} has no location data`);
+        return false;
+      }
+      
+      const distance = distanceKm(d.lastKnownLocation, { latitude: pickupLat, longitude: pickupLon });
+      console.log(`📍 Driver ${d._id} at ${d.lastKnownLocation.latitude}, ${d.lastKnownLocation.longitude} - distance: ${distance.toFixed(2)}km`);
+      
+      return distance <= searchRadius;
+    });
+    
+    console.log(`✅ Found ${nearby.length} drivers within ${searchRadius}km`);
 
     // Enrich driver data via templated external user directory to target the correct API
     const { getDriverById: getDriverById2, listDrivers: listDrivers2, getDriversByIds: getDriversByIds2 } = require('../services/userDirectory');
@@ -422,7 +483,7 @@ async function discoverAndEstimate(req, res) {
         vehicleType: driver.vehicleType,
         rating: driver.rating || 5.0,
         lastKnownLocation: driver.lastKnownLocation || null,
-        distanceKm: distanceKm(driver.lastKnownLocation, { latitude: +pickup.latitude, longitude: +pickup.longitude })
+        distanceKm: distanceKm(driver.lastKnownLocation, { latitude: pickupLat, longitude: pickupLon })
       };
 
       const lookupId = driver.externalId || driver._id;
@@ -508,5 +569,64 @@ async function discoverAndEstimate(req, res) {
   }
 }
 
+// Debug endpoint for testing location matching
+async function debugLocation(req, res) {
+  try {
+    const { latitude, longitude, radiusKm = 5 } = req.query;
+    
+    if (!latitude || !longitude) {
+      return res.status(400).json({ message: 'latitude and longitude are required' });
+    }
+    
+    const passengerLat = parseFloat(latitude);
+    const passengerLon = parseFloat(longitude);
+    const searchRadius = parseFloat(radiusKm);
+    
+    console.log(`🔍 DEBUG: Testing location matching for passenger at ${passengerLat}, ${passengerLon} within ${searchRadius}km`);
+    
+    // Get all drivers (available and unavailable)
+    const allDrivers = await Driver.find({}).select('_id available vehicleType lastKnownLocation name phone email');
+    console.log(`📊 DEBUG: Found ${allDrivers.length} total drivers in database`);
+    
+    const availableDrivers = allDrivers.filter(d => d.available);
+    console.log(`📊 DEBUG: Found ${availableDrivers.length} available drivers`);
+    
+    const driversWithLocation = availableDrivers.filter(d => d.lastKnownLocation);
+    console.log(`📊 DEBUG: Found ${driversWithLocation.length} available drivers with location data`);
+    
+    const nearbyDrivers = driversWithLocation.filter(d => {
+      const distance = distanceKm(d.lastKnownLocation, { latitude: passengerLat, longitude: passengerLon });
+      console.log(`📍 DEBUG: Driver ${d._id} (${d.name || 'No name'}) at ${d.lastKnownLocation.latitude}, ${d.lastKnownLocation.longitude} - distance: ${distance.toFixed(2)}km`);
+      return distance <= searchRadius;
+    });
+    
+    console.log(`✅ DEBUG: Found ${nearbyDrivers.length} drivers within ${searchRadius}km`);
+    
+    const response = {
+      passengerLocation: { latitude: passengerLat, longitude: passengerLon },
+      searchRadius: searchRadius,
+      totalDrivers: allDrivers.length,
+      availableDrivers: availableDrivers.length,
+      driversWithLocation: driversWithLocation.length,
+      nearbyDrivers: nearbyDrivers.length,
+      drivers: nearbyDrivers.map(d => ({
+        id: String(d._id),
+        name: d.name || 'No name',
+        phone: d.phone || 'No phone',
+        vehicleType: d.vehicleType,
+        available: d.available,
+        location: d.lastKnownLocation,
+        distanceKm: distanceKm(d.lastKnownLocation, { latitude: passengerLat, longitude: passengerLon })
+      }))
+    };
+    
+    return res.json(response);
+  } catch (e) {
+    console.error('DEBUG ERROR:', e);
+    return res.status(500).json({ message: `Debug failed: ${e.message}` });
+  }
+}
+
 module.exports.discoverAndEstimate = discoverAndEstimate;
+module.exports.debugLocation = debugLocation;
 
