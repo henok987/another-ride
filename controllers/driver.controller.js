@@ -1,14 +1,14 @@
 // driverController.js (User Service)
-const { models } = require('../models');
+const { Driver, Passenger } = require('../models/userModels');
 const { hashPassword } = require('../utils/password');
 
 exports.create = async (req, res) => {
   try {
-    const data = req.body;
+    const data = req.body || {};
     if (data.password) data.password = await hashPassword(data.password);
     // New drivers should start with 'pending' status by default
-    const row = await models.Driver.create({ ...data, status: data.status || 'pending' });
-    const driverWithRoles = await models.Driver.findByPk(row.id, { include: ['roles'] });
+    const row = await Driver.create({ ...data, status: data.status || 'pending' });
+    const driverWithRoles = await Driver.findById(row._id).populate('roles').lean();
     return res.status(201).json(driverWithRoles);
   } catch (e) {
     console.error('Error creating driver:', e);
@@ -18,7 +18,7 @@ exports.create = async (req, res) => {
 
 exports.list = async (req, res) => {
   try {
-    const rows = await models.Driver.findAll({ include: ['roles'] });
+    const rows = await Driver.find().populate('roles').lean();
     return res.json(rows);
   } catch (e) {
     console.error('Error listing drivers:', e);
@@ -28,7 +28,7 @@ exports.list = async (req, res) => {
 
 exports.get = async (req, res) => {
   try {
-    const row = await models.Driver.findByPk(req.params.id, { include: ['roles'] });
+    const row = await Driver.findById(req.params.id).populate('roles').lean();
     if (!row) return res.status(404).json({ message: 'Driver not found' });
     return res.json(row);
   } catch (e) {
@@ -49,9 +49,10 @@ exports.update = async (req, res) => {
     if ('status' in data) delete data.status;                   // Should be updated via adminController's specific functions
 
     if (data.password) data.password = await hashPassword(data.password);
-    const [count] = await models.Driver.update(data, { where: { id: req.params.id } });
-    if (!count) return res.status(404).json({ message: 'Driver not found' });
-    const updated = await models.Driver.findByPk(req.params.id, { include: ['roles'] });
+    const updated = await Driver.findByIdAndUpdate(req.params.id, data, { new: true })
+      .populate('roles')
+      .lean();
+    if (!updated) return res.status(404).json({ message: 'Driver not found' });
     return res.json(updated);
   } catch (e) {
     console.error('Error updating driver:', e);
@@ -61,8 +62,8 @@ exports.update = async (req, res) => {
 
 exports.remove = async (req, res) => {
   try {
-    const count = await models.Driver.destroy({ where: { id: req.params.id } });
-    if (!count) return res.status(404).json({ message: 'Driver not found' });
+    const r = await Driver.findByIdAndDelete(req.params.id);
+    if (!r) return res.status(404).json({ message: 'Driver not found' });
     return res.status(204).send();
   } catch (e) {
     console.error('Error deleting driver:', e);
@@ -75,7 +76,7 @@ exports.getMyProfile = async (req, res) => {
   try {
     // req.user will be populated by authentication middleware (within User Service)
     if (req.user.type !== 'driver') return res.status(403).json({ message: 'Only drivers can access this endpoint' });
-    const driver = await models.Driver.findByPk(req.user.id, { include: ['roles'] });
+    const driver = await Driver.findById(req.user.id).populate('roles');
     if (!driver) return res.status(404).json({ message: 'Driver not found' });
     return res.json(driver);
   } catch (e) {
@@ -97,9 +98,9 @@ exports.updateMyProfile = async (req, res) => {
     if ('rewardPoints' in data) delete data.rewardPoints; // Driver cannot award themselves points
 
     if (data.password) data.password = await hashPassword(data.password);
-    const [count] = await models.Driver.update(data, { where: { id: req.user.id } });
-    if (!count) return res.status(404).json({ message: 'Driver not found' });
-    const updated = await models.Driver.findByPk(req.user.id, { include: ['roles'] });
+    const updated = await Driver.findByIdAndUpdate(req.user.id, data, { new: true })
+      .populate('roles');
+    if (!updated) return res.status(404).json({ message: 'Driver not found' });
     return res.json(updated);
   } catch (e) {
     console.error('Error updating driver profile:', e);
@@ -110,7 +111,7 @@ exports.updateMyProfile = async (req, res) => {
 exports.toggleMyAvailability = async (req, res) => {
   try {
     if (req.user.type !== 'driver') return res.status(403).json({ message: 'Only drivers can toggle availability' });
-    const driver = await models.Driver.findByPk(req.user.id);
+    const driver = await Driver.findById(req.user.id);
     if (!driver) return res.status(404).json({ message: 'Driver not found' });
 
     // Check driver status before allowing availability change
@@ -186,7 +187,7 @@ exports.toggleAvailability = async (req, res) => {
   try {
     // This looks like an admin-level action, or for a driver to toggle their own via a different route.
     // Assuming this is an admin acting on a specific driver ID. If not, it should be adjusted.
-    const driver = await models.Driver.findByPk(req.params.id);
+    const driver = await Driver.findById(req.params.id);
     if (!driver) return res.status(404).json({ message: 'Driver not found' });
 
     // Apply the same status checks as toggleMyAvailability
@@ -207,7 +208,7 @@ exports.toggleAvailability = async (req, res) => {
 
 exports.uploadDocuments = async (req, res) => {
   try {
-    const driver = await models.Driver.findByPk(req.params.id); // Assuming this is for a specific driver ID, e.g., driver self-uploading or admin assisting.
+    const driver = await Driver.findById(req.params.id); // Assuming this is for a specific driver ID, e.g., driver self-uploading or admin assisting.
     if (!driver) return res.status(404).json({ message: 'Driver not found' });
 
     const updateData = {};
@@ -231,11 +232,11 @@ exports.uploadDocuments = async (req, res) => {
     }
 
     if (Object.keys(updateData).length > 0) {
-      updateData.documentStatus = 'pending'; // Documents submitted, status changes to pending review
-      await models.Driver.update(updateData, { where: { id: req.params.id } });
+      updateData.documentStatus = 'pending';
+      await Driver.findByIdAndUpdate(req.params.id, updateData);
     }
 
-    const updated = await models.Driver.findByPk(req.params.id, { include: ['roles'] }); // Re-fetch with roles
+    const updated = await Driver.findById(req.params.id).populate('roles');
     return res.json({ message: 'Documents uploaded successfully', driver: updated, uploadedFiles: Object.keys(updateData).filter(k => k !== 'documentStatus') });
   } catch (e) {
     console.error('Error uploading driver documents:', e);
@@ -250,7 +251,7 @@ exports.ratePassenger = async (req, res) => {
     const { rating, comment } = req.body; // Comment is not stored in Passenger model directly, but could be in a separate Rating model
     const passengerId = req.params.passengerId;
 
-    const passenger = await models.Passenger.findByPk(passengerId);
+    const passenger = await Passenger.findById(passengerId);
     if (!passenger) return res.status(404).json({ message: 'Passenger not found' });
 
     // Set rating directly, capped between 0 and 5
@@ -258,8 +259,8 @@ exports.ratePassenger = async (req, res) => {
     if (!Number.isFinite(value) || value < 0 || value > 5) return res.status(400).json({ message: 'Invalid rating. Must be a number between 0 and 5.' });
     const newRating = Math.max(0, Math.min(5, value)); // Ensure rating is within 0-5
 
-    await models.Passenger.update({ rating: newRating }, { where: { id: passengerId } });
-    const updatedPassenger = await models.Passenger.findByPk(passengerId);
+    await Passenger.findByIdAndUpdate(passengerId, { rating: newRating });
+    const updatedPassenger = await Passenger.findById(passengerId);
     return res.json({ message: 'Passenger rated successfully', passenger: updatedPassenger, rating: newRating, comment });
   } catch (e) {
     console.error('Error rating passenger:', e);
