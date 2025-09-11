@@ -1,385 +1,512 @@
-// driverController.js (User Service)
-const { Driver, Passenger } = require('../models/userModels');
-const { hashPassword } = require('../utils/password');
-const geolib = require('geolib');
+const { Driver } = require('../models/userModels');
+const { crudController } = require('./basic.crud');
 const { Pricing } = require('../models/pricing');
+const geolib = require('geolib');
 
-exports.create = async (req, res) => {
-  try {
-    const data = req.body || {};
-    if (data.password) data.password = await hashPassword(data.password);
-    // New drivers should start with 'pending' status by default
-    const row = await Driver.create({ ...data, status: data.status || 'pending' });
-    const driverWithRoles = await Driver.findById(row._id).populate('roles').lean();
-    return res.status(201).json(driverWithRoles);
-  } catch (e) {
-    console.error('Error creating driver:', e);
-    return res.status(500).json({ message: e.message });
-  }
-};
-
-exports.list = async (req, res) => {
-  try {
-    const rows = await Driver.find().populate('roles').lean();
-    return res.json(rows);
-  } catch (e) {
-    console.error('Error listing drivers:', e);
-    return res.status(500).json({ message: e.message });
-  }
-};
-
-exports.get = async (req, res) => {
-  try {
-    const row = await Driver.findById(req.params.id).populate('roles').lean();
-    if (!row) return res.status(404).json({ message: 'Driver not found' });
-    return res.json(row);
-  } catch (e) {
-    console.error('Error getting driver:', e);
-    return res.status(500).json({ message: e.message });
-  }
-};
-
-exports.update = async (req, res) => {
-  try {
-    const body = req.body || {};
-    // Prevent updates to rating fields and sensitive status fields from this admin-like route
-    const data = { ...body };
-    if ('rating' in data) delete data.rating;
-    if ('ratingCount' in data) delete data.ratingCount;
-    if ('documentStatus' in data) delete data.documentStatus; // Should be updated via adminController's specific functions
-    if ('verification' in data) delete data.verification;       // Should be updated via adminController's specific functions
-    if ('status' in data) delete data.status;                   // Should be updated via adminController's specific functions
-
-    if (data.password) data.password = await hashPassword(data.password);
-    const updated = await Driver.findByIdAndUpdate(req.params.id, data, { new: true })
-      .populate('roles')
-      .lean();
-    if (!updated) return res.status(404).json({ message: 'Driver not found' });
-    return res.json(updated);
-  } catch (e) {
-    console.error('Error updating driver:', e);
-    return res.status(500).json({ message: e.message });
-  }
-};
-
-exports.remove = async (req, res) => {
-  try {
-    const r = await Driver.findByIdAndDelete(req.params.id);
-    if (!r) return res.status(404).json({ message: 'Driver not found' });
-    return res.status(204).send();
-  } catch (e) {
-    console.error('Error deleting driver:', e);
-    return res.status(500).json({ message: e.message });
-  }
-};
-
-// Driver self-control methods
-exports.getMyProfile = async (req, res) => {
-  try {
-    // req.user will be populated by authentication middleware (within User Service)
-    if (req.user.type !== 'driver') return res.status(403).json({ message: 'Only drivers can access this endpoint' });
-    const driver = await Driver.findById(req.user.id).populate('roles');
-    if (!driver) return res.status(404).json({ message: 'Driver not found' });
-    return res.json(driver);
-  } catch (e) {
-    console.error('Error getting driver profile:', e);
-    return res.status(500).json({ message: e.message });
-  }
-};
-
-exports.updateMyProfile = async (req, res) => {
-  try {
-    if (req.user.type !== 'driver') return res.status(403).json({ message: 'Only drivers can access this endpoint' });
-    const data = { ...req.body };
-    // Prevent drivers from self-updating rating fields, and critical status/verification fields
-    if ('rating' in data) delete data.rating;
-    if ('ratingCount' in data) delete data.ratingCount;
-    if ('status' in data) delete data.status;
-    if ('verification' in data) delete data.verification;
-    if ('documentStatus' in data) delete data.documentStatus;
-    if ('rewardPoints' in data) delete data.rewardPoints; // Driver cannot award themselves points
-
-    if (data.password) data.password = await hashPassword(data.password);
-    const updated = await Driver.findByIdAndUpdate(req.user.id, data, { new: true })
-      .populate('roles');
-    if (!updated) return res.status(404).json({ message: 'Driver not found' });
-    return res.json(updated);
-  } catch (e) {
-    console.error('Error updating driver profile:', e);
-    return res.status(500).json({ message: e.message });
-  }
-};
-
-exports.toggleMyAvailability = async (req, res) => {
-  try {
-    if (req.user.type !== 'driver') return res.status(403).json({ message: 'Only drivers can toggle availability' });
-    const driver = await Driver.findById(req.user.id);
-    if (!driver) return res.status(404).json({ message: 'Driver not found' });
-
-    // Check driver status before allowing availability change
-    if (driver.status === 'pending') {
-      return res.status(403).json({
-        message: 'Cannot change availability. Your account is still pending approval. Please contact support.'
+const base = {
+  ...crudController(Driver),
+  list: async (req, res) => {
+    try {
+      const { page = 1, limit = 20, status, available } = req.query;
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+      
+      let query = {};
+      if (status) {
+        query.status = status;
+      }
+      if (available !== undefined) {
+        query.available = available === 'true';
+      }
+      
+      const drivers = await Driver.find(query)
+        .select('_id name phone email vehicleType available lastKnownLocation rating createdAt updatedAt')
+        .skip(skip)
+        .limit(parseInt(limit))
+        .sort({ createdAt: -1 })
+        .lean();
+      
+      const total = await Driver.countDocuments(query);
+      
+      const response = drivers.map(d => ({
+        id: String(d._id),
+        name: d.name,
+        phone: d.phone,
+        email: d.email,
+        vehicleType: d.vehicleType,
+        available: !!d.available,
+        lastKnownLocation: d.lastKnownLocation || null,
+        rating: d.rating || 5.0,
+        createdAt: d.createdAt,
+        updatedAt: d.updatedAt
+      }));
+      
+      return res.json({
+        drivers: response,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          pages: Math.ceil(total / parseInt(limit))
+        }
       });
+    } catch (e) {
+      return res.status(500).json({ message: `Failed to retrieve Driver list: ${e.message}` });
     }
-
-    if (driver.status === 'suspended') {
-      return res.status(403).json({
-        message: 'Cannot change availability. Your account has been suspended. Please contact support.'
-      });
+  },
+  get: async (req, res) => {
+    try {
+      const driver = await Driver.findById(req.params.id)
+        .select('_id name phone email vehicleType available lastKnownLocation rating createdAt updatedAt')
+        .lean();
+      
+      if (!driver) {
+        return res.status(404).json({ message: 'Driver not found' });
+      }
+      
+      const response = {
+        id: String(driver._id),
+        name: driver.name,
+        phone: driver.phone,
+        email: driver.email,
+        vehicleType: driver.vehicleType,
+        available: !!driver.available,
+        lastKnownLocation: driver.lastKnownLocation || null,
+        rating: driver.rating || 5.0,
+        createdAt: driver.createdAt,
+        updatedAt: driver.updatedAt
+      };
+      
+      return res.json(response);
+    } catch (e) {
+      return res.status(500).json({ message: `Failed to retrieve Driver: ${e.message}` });
     }
-
-    if (driver.status === 'rejected') {
-      return res.status(403).json({
-        message: 'Cannot change availability. Your account has been rejected. Please contact support.'
-      });
-    }
-
-    driver.availability = !driver.availability;
-    await driver.save();
-    return res.json({
-      message: 'Availability updated',
-      availability: driver.availability,
-      status: driver.status
-    });
-  } catch (e) {
-    console.error('Error toggling driver availability:', e);
-    return res.status(500).json({ message: e.message });
   }
 };
 
-exports.checkBookingEligibility = async (req, res) => {
+async function setAvailability(req, res) {
   try {
-    if (req.user.type !== 'driver') return res.status(403).json({ message: 'Only drivers can check booking eligibility' });
-    const driver = await models.Driver.findByPk(req.user.id);
-    if (!driver) return res.status(404).json({ message: 'Driver not found' });
-
-    // Using 'approved' as the internal active status
-    const canAcceptBookings = driver.status === 'approved' && driver.availability;
-    let message = '';
-
-    if (driver.status === 'pending') {
-      message = 'Your account is still pending approval. You cannot accept bookings until your account is approved.';
-    } else if (driver.status === 'suspended') {
-      message = 'Your account has been suspended. You cannot accept bookings. Please contact support.';
-    } else if (driver.status === 'rejected') {
-      message = 'Your account has been rejected. You cannot accept bookings. Please contact support.';
-    } else if (!driver.availability) {
-      message = 'You are currently offline. Please toggle your availability to accept bookings.';
-    } else { // status is 'approved' and availability is true
-      message = 'You are eligible to accept bookings.';
-    }
-
-    return res.json({
-      canAcceptBookings,
-      status: driver.status,
-      availability: driver.availability,
-      message
-    });
-  } catch (e) {
-    console.error('Error checking driver booking eligibility:', e);
-    return res.status(500).json({ message: e.message });
-  }
-};
-
-// This endpoint seems redundant with toggleMyAvailability for the authenticated driver.
-// If it's for an admin to toggle ANY driver's availability, it should be in adminController.
-// For now, keeping it here but noting potential redundancy.
-exports.toggleAvailability = async (req, res) => {
-  try {
-    // This looks like an admin-level action, or for a driver to toggle their own via a different route.
-    // Assuming this is an admin acting on a specific driver ID. If not, it should be adjusted.
-    const driver = await Driver.findById(req.params.id);
-    if (!driver) return res.status(404).json({ message: 'Driver not found' });
-
-    // Apply the same status checks as toggleMyAvailability
-    if (driver.status === 'pending' || driver.status === 'suspended' || driver.status === 'rejected') {
-        return res.status(403).json({
-            message: `Cannot change availability. Driver account is ${driver.status}. Please address account status first.`
-        });
-    }
-
-    driver.availability = !driver.availability;
-    await driver.save();
-    return res.json(driver);
-  } catch (e) {
-    console.error('Error toggling driver availability (admin-like):', e);
-    return res.status(500).json({ message: e.message });
-  }
-};
-
-exports.uploadDocuments = async (req, res) => {
-  try {
-    const driver = await Driver.findById(req.params.id); // Assuming this is for a specific driver ID, e.g., driver self-uploading or admin assisting.
-    if (!driver) return res.status(404).json({ message: 'Driver not found' });
-
-    const updateData = {};
-
-    // Assuming req.files is populated by a middleware like 'multer'
-    if (req.files) {
-      if (req.files.nationalId && req.files.nationalId[0]) updateData.nationalIdFile = req.files.nationalId[0].filename;
-      if (req.files.vehicleRegistration && req.files.vehicleRegistration[0]) updateData.vehicleRegistrationFile = req.files.vehicleRegistration[0].filename;
-      if (req.files.insurance && req.files.insurance[0]) updateData.insuranceFile = req.files.insurance[0].filename;
-      // 'document' seems generic; assuming it refers to an 'other document' field
-      if (req.files.document && req.files.document[0]) updateData.document = req.files.document[0].filename;
-      if (req.files.license && req.files.license[0]) updateData.drivingLicenseFile = req.files.license[0].filename;
-    }
-
-    // Ensure all required docs are present either already or in this upload
-    const required = ['nationalIdFile', 'vehicleRegistrationFile', 'insuranceFile', 'document', 'drivingLicenseFile'];
-    // Check if the file is being uploaded now OR if the driver already has it
-    const missing = required.filter(k => !(updateData[k] || driver[k]));
-    if (missing.length) {
-      return res.status(400).json({ message: 'Missing required documents', missing });
-    }
-
-    if (Object.keys(updateData).length > 0) {
-      updateData.documentStatus = 'pending';
-      await Driver.findByIdAndUpdate(req.params.id, updateData);
-    }
-
-    const updated = await Driver.findById(req.params.id).populate('roles');
-    return res.json({ message: 'Documents uploaded successfully', driver: updated, uploadedFiles: Object.keys(updateData).filter(k => k !== 'documentStatus') });
-  } catch (e) {
-    console.error('Error uploading driver documents:', e);
-    return res.status(500).json({ message: e.message });
-  }
-};
-
-// Driver rates passenger (occurs entirely within User Service)
-exports.ratePassenger = async (req, res) => {
-  try {
-    if (req.user.type !== 'driver') return res.status(403).json({ message: 'Only drivers can rate passengers' });
-    const { rating, comment } = req.body; // Comment is not stored in Passenger model directly, but could be in a separate Rating model
-    const passengerId = req.params.passengerId;
-
-    const passenger = await Passenger.findById(passengerId);
-    if (!passenger) return res.status(404).json({ message: 'Passenger not found' });
-
-    // Set rating directly, capped between 0 and 5
-    const value = Number(rating);
-    if (!Number.isFinite(value) || value < 0 || value > 5) return res.status(400).json({ message: 'Invalid rating. Must be a number between 0 and 5.' });
-    const newRating = Math.max(0, Math.min(5, value)); // Ensure rating is within 0-5
-
-    await Passenger.findByIdAndUpdate(passengerId, { rating: newRating });
-    const updatedPassenger = await Passenger.findById(passengerId);
-    return res.json({ message: 'Passenger rated successfully', passenger: updatedPassenger, rating: newRating, comment });
-  } catch (e) {
-    console.error('Error rating passenger:', e);
-    return res.status(500).json({ message: e.message });
-  }
-};
-
-// --- Additional handlers to match routes ---
-exports.availableNearby = async (req, res) => {
-  try {
-    const { latitude, longitude, radiusMeters = 5000 } = req.query;
-    let drivers = await Driver.find({ availability: true }).select({ _id: 1, name: 1, phone: 1, lastKnownLocation: 1, vehicleType: 1 }).lean();
-    if (latitude != null && longitude != null) {
-      const lat = Number(latitude);
-      const lng = Number(longitude);
-      const radius = Number(radiusMeters);
-      drivers = drivers.filter(d => d.lastKnownLocation && geolib.isPointWithinRadius(
-        { latitude: d.lastKnownLocation.latitude, longitude: d.lastKnownLocation.longitude },
-        { latitude: lat, longitude: lng },
-        radius
-      ));
-    }
-    return res.json(drivers.map(d => ({ id: String(d._id), name: d.name, phone: d.phone, vehicleType: d.vehicleType, lastKnownLocation: d.lastKnownLocation })));
-  } catch (e) {
-    return res.status(500).json({ message: e.message });
-  }
-};
-
-exports.setAvailability = async (req, res) => {
-  try {
-    if (req.user.type !== 'driver') return res.status(403).json({ message: 'Only drivers can change availability' });
-    const desired = req.body && typeof req.body.available === 'boolean' ? req.body.available : null;
-    const driver = await Driver.findById(req.user.id);
-    if (!driver) return res.status(404).json({ message: 'Driver not found' });
-    if (desired === null) {
-      driver.availability = !driver.availability;
-    } else {
-      driver.availability = desired;
-    }
-    await driver.save();
-    return res.json({ message: 'Availability updated', availability: driver.availability });
-  } catch (e) {
-    return res.status(500).json({ message: e.message });
-  }
-};
-
-exports.updateLocation = async (req, res) => {
-  try {
-    if (req.user.type !== 'driver') return res.status(403).json({ message: 'Only drivers can update location' });
-    const { latitude, longitude, bearing } = req.body || {};
-    if (latitude == null || longitude == null) return res.status(400).json({ message: 'latitude and longitude are required' });
-    const updated = await Driver.findByIdAndUpdate(req.user.id, { $set: { lastKnownLocation: { latitude: Number(latitude), longitude: Number(longitude), bearing: typeof bearing === 'number' ? bearing : undefined } } }, { new: true })
-      .select({ _id: 1, lastKnownLocation: 1 });
-    if (!updated) return res.status(404).json({ message: 'Driver not found' });
-    return res.json({ id: String(updated._id), lastKnownLocation: updated.lastKnownLocation });
-  } catch (e) {
-    return res.status(500).json({ message: e.message });
-  }
-};
-
-async function computeEstimate(vehicleType, pickup, dropoff) {
-  const distanceKm = geolib.getDistance(
-    { latitude: pickup.latitude, longitude: pickup.longitude },
-    { latitude: dropoff.latitude, longitude: dropoff.longitude }
-  ) / 1000;
-  const pricing = await Pricing.findOne({ vehicleType: vehicleType || 'mini', isActive: true }).sort({ updatedAt: -1 });
-  const p = pricing || { baseFare: 2, perKm: 1, perMinute: 0, waitingPerMinute: 0, surgeMultiplier: 1 };
-  const fareBreakdown = {
-    base: p.baseFare,
-    distanceCost: distanceKm * p.perKm,
-    timeCost: 0,
-    waitingCost: 0,
-    surgeMultiplier: p.surgeMultiplier
-  };
-  const fareEstimated = (fareBreakdown.base + fareBreakdown.distanceCost + fareBreakdown.timeCost + fareBreakdown.waitingCost) * fareBreakdown.surgeMultiplier;
-  return { distanceKm, fareEstimated, fareBreakdown };
+    const driverId = String((((req.user && req.user.id) !== undefined && (req.user && req.user.id) !== null) ? req.user.id : req.params.id) || '');
+    if (!driverId) return res.status(400).json({ message: 'Invalid driver id' });
+    const d = await Driver.findByIdAndUpdate(driverId, { $set: { available: !!req.body.available } }, { new: true, upsert: true, setDefaultsOnInsert: true });
+    if (!d) return res.status(404).json({ message: 'Not found' });
+    
+    // Add driver basic information from JWT token
+    const driverInfo = {
+      id: String(req.user.id),
+      name: req.user.name || req.user.fullName || req.user.displayName,
+      phone: req.user.phone || req.user.phoneNumber || req.user.mobile,
+      email: req.user.email,
+      vehicleType: req.user.vehicleType
+    };
+    
+    const response = {
+      id: String(d._id),
+      driverId: String(d._id),
+      available: d.available,
+      vehicleType: d.vehicleType,
+      lastKnownLocation: d.lastKnownLocation,
+      rating: d.rating || 5.0,
+      createdAt: d.createdAt,
+      updatedAt: d.updatedAt,
+      driver: driverInfo
+    };
+    
+    return res.json(response);
+  } catch (e) { return res.status(500).json({ message: e.message }); }
 }
 
-exports.estimateFareForPassenger = async (req, res) => {
+async function updateLocation(req, res) {
   try {
-    const { vehicleType, pickup, dropoff } = req.body || {};
-    if (!pickup || !dropoff) return res.status(400).json({ message: 'pickup and dropoff are required' });
-    const est = await computeEstimate(vehicleType, pickup, dropoff);
-    return res.json(est);
-  } catch (e) {
-    return res.status(500).json({ message: e.message });
-  }
-};
+    const driverId = String((((req.user && req.user.id) !== undefined && (req.user && req.user.id) !== null) ? req.user.id : req.params.id) || '');
+    if (!driverId) return res.status(400).json({ message: 'Invalid driver id' });
+    const { latitude, longitude, bearing } = req.body;
+    
+    const locationUpdate = { latitude, longitude };
+    if (bearing !== undefined && bearing >= 0 && bearing <= 360) {
+      locationUpdate.bearing = bearing;
+    }
+    
+    const d = await Driver.findByIdAndUpdate(driverId, { $set: { lastKnownLocation: locationUpdate } }, { new: true, upsert: true, setDefaultsOnInsert: true });
+    if (!d) return res.status(404).json({ message: 'Not found' });
+    
+    // Add driver basic information from JWT token
+    const driverInfo = {
+      id: String(req.user.id),
+      name: req.user.name || req.user.fullName || req.user.displayName,
+      phone: req.user.phone || req.user.phoneNumber || req.user.mobile,
+      email: req.user.email,
+      vehicleType: req.user.vehicleType
+    };
+    
+    const response = {
+      id: String(d._id),
+      driverId: String(d._id),
+      available: d.available,
+      vehicleType: d.vehicleType,
+      lastKnownLocation: d.lastKnownLocation,
+      rating: d.rating || 5.0,
+      createdAt: d.createdAt,
+      updatedAt: d.updatedAt,
+      driver: driverInfo
+    };
+    
+    return res.json(response);
+  } catch (e) { return res.status(500).json({ message: e.message }); }
+}
 
-exports.estimateFareForDriver = async (req, res) => {
+async function availableNearby(req, res) {
+  try {
+    const { latitude, longitude, radiusKm = 5, vehicleType } = req.query;
+    const all = await Driver.find({ available: true, ...(vehicleType ? { vehicleType } : {}) });
+    const nearby = all.filter(d => d.lastKnownLocation && distanceKm(d.lastKnownLocation, { latitude: +latitude, longitude: +longitude }) <= +radiusKm);
+
+    // Enrich driver info via templated external user directory to target the correct API
+    const { getDriverById, getDriversByIds, listDrivers } = require('../services/userDirectory');
+    const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
+
+    const enriched = await Promise.all(nearby.map(async (driver) => {
+      const base = {
+        id: String(driver._id),
+        driverId: String(driver._id),
+        vehicleType: driver.vehicleType,
+        rating: driver.rating || 5.0,
+        lastKnownLocation: {
+          latitude: driver.lastKnownLocation.latitude,
+          longitude: driver.lastKnownLocation.longitude,
+          bearing: driver.lastKnownLocation.bearing || null
+        },
+        distanceKm: distanceKm(driver.lastKnownLocation, { latitude: +latitude, longitude: +longitude })
+      };
+
+      const lookupId = driver.externalId || driver._id;
+      let name = driver.name || undefined;
+      let phone = driver.phone || undefined;
+      let email = driver.email || undefined;
+      if (!name || !phone) {
+        try {
+          const ext = await getDriverById(String(lookupId), { headers: authHeader });
+          if (ext) {
+            name = name || ext.name;
+            phone = phone || ext.phone;
+            // persist enrichment for future requests
+            try {
+              const update = { };
+              if (ext.name && !driver.name) update.name = ext.name;
+              if (ext.phone && !driver.phone) update.phone = ext.phone;
+              if (driver.externalId == null && lookupId !== driver._id) update.externalId = String(lookupId);
+              if (Object.keys(update).length) await Driver.findByIdAndUpdate(driver._id, { $set: update });
+            } catch (_) {}
+          }
+          // If still missing, try listing by vehicleType or generic listing and match by id
+          if ((!name || !phone)) {
+            const list = await listDrivers({ vehicleType: driver.vehicleType }, { headers: authHeader });
+            const match = (list || []).find(u => String(u.id) === String(driver._id));
+            if (match) {
+              name = name || match.name;
+              phone = phone || match.phone;
+              // persist
+              try {
+                const update = { };
+                if (match.name && !driver.name) update.name = match.name;
+                if (match.phone && !driver.phone) update.phone = match.phone;
+                if (Object.keys(update).length) await Driver.findByIdAndUpdate(driver._id, { $set: update });
+              } catch (_) {}
+            }
+          }
+        } catch (_) {}
+      }
+
+      const driverInfo = {
+        id: String(driver._id),
+        name: name || '',
+        phone: phone || '',
+        email: email || '',
+        vehicleType: driver.vehicleType
+      };
+
+      return { ...base, driver: driverInfo };
+    }));
+
+    // Sort by distance (closest first)
+    enriched.sort((a, b) => a.distanceKm - b.distanceKm);
+
+    return res.json(enriched);
+  } catch (e) { return res.status(500).json({ message: `Failed to find nearby drivers: ${e.message}` }); }
+}
+
+function distanceKm(a, b) {
+  if (!a || !b || a.latitude == null || b.latitude == null) return Number.POSITIVE_INFINITY;
+  const toRad = (v) => (v * Math.PI) / 180;
+  const R = 6371;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLon = toRad(b.longitude - a.longitude);
+  const lat1 = toRad(a.latitude);
+  const lat2 = toRad(b.latitude);
+  const aHarv = Math.sin(dLat/2)**2 + Math.sin(dLon/2)**2 * Math.cos(lat1) * Math.cos(lat2);
+  return 2 * R * Math.asin(Math.sqrt(aHarv));
+}
+
+// Fare estimation for passengers before booking
+async function estimateFareForPassenger(req, res) {
+  try {
+    const { vehicleType = 'mini', pickup, dropoff } = req.body;
+    
+    if (!pickup || !dropoff) {
+      return res.status(400).json({ message: 'Pickup and dropoff locations are required' });
+    }
+
+    if (!pickup.latitude || !pickup.longitude || !dropoff.latitude || !dropoff.longitude) {
+      return res.status(400).json({ message: 'Valid latitude and longitude are required for both pickup and dropoff' });
+    }
+
+    // Calculate distance
+    const distanceKm = geolib.getDistance(
+      { latitude: pickup.latitude, longitude: pickup.longitude },
+      { latitude: dropoff.latitude, longitude: dropoff.longitude }
+    ) / 1000;
+
+    // Get pricing for vehicle type
+    const pricing = await Pricing.findOne({ vehicleType, isActive: true }).sort({ updatedAt: -1 });
+    
+    if (!pricing) {
+      return res.status(404).json({ message: `No pricing found for vehicle type: ${vehicleType}` });
+    }
+
+    // Calculate fare breakdown
+    const fareBreakdown = {
+      base: pricing.baseFare,
+      distanceCost: distanceKm * pricing.perKm,
+      timeCost: 0, // Could be calculated based on estimated travel time
+      waitingCost: 0, // Could be calculated based on waiting time
+      surgeMultiplier: pricing.surgeMultiplier
+    };
+
+    const estimatedFare = (fareBreakdown.base + fareBreakdown.distanceCost + fareBreakdown.timeCost + fareBreakdown.waitingCost) * fareBreakdown.surgeMultiplier;
+
+    res.json({
+      vehicleType,
+      distanceKm: Math.round(distanceKm * 100) / 100, // Round to 2 decimal places
+      estimatedFare: Math.round(estimatedFare * 100) / 100,
+      fareBreakdown,
+      pricing: {
+        baseFare: pricing.baseFare,
+        perKm: pricing.perKm,
+        perMinute: pricing.perMinute,
+        waitingPerMinute: pricing.waitingPerMinute,
+        surgeMultiplier: pricing.surgeMultiplier
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ message: `Failed to estimate fare: ${e.message}` });
+  }
+}
+
+// Fare estimation for drivers before accepting booking
+async function estimateFareForDriver(req, res) {
   try {
     const { bookingId } = req.params;
+    const driverId = req.user.id;
+
+    // Get the booking details
     const { Booking } = require('../models/bookingModels');
-    const b = await Booking.findById(bookingId).lean();
-    if (!b) return res.status(404).json({ message: 'Booking not found' });
-    const est = await computeEstimate(b.vehicleType, b.pickup, b.dropoff);
-    return res.json(est);
+    const booking = await Booking.findById(bookingId);
+    
+    if (!booking) {
+      return res.status(404).json({ message: 'Booking not found' });
+    }
+
+    // Check if driver is assigned to this booking
+    if (booking.driverId && booking.driverId !== driverId) {
+      return res.status(403).json({ message: 'You are not assigned to this booking' });
+    }
+
+    // Calculate distance if not already calculated
+    let distanceKm = booking.distanceKm;
+    if (!distanceKm && booking.pickup && booking.dropoff) {
+      distanceKm = geolib.getDistance(
+        { latitude: booking.pickup.latitude, longitude: booking.pickup.longitude },
+        { latitude: booking.dropoff.latitude, longitude: booking.dropoff.longitude }
+      ) / 1000;
+    }
+
+    // Get pricing for vehicle type
+    const pricing = await Pricing.findOne({ vehicleType: booking.vehicleType, isActive: true }).sort({ updatedAt: -1 });
+    
+    if (!pricing) {
+      return res.status(404).json({ message: `No pricing found for vehicle type: ${booking.vehicleType}` });
+    }
+
+    // Calculate fare breakdown
+    const fareBreakdown = {
+      base: pricing.baseFare,
+      distanceCost: distanceKm * pricing.perKm,
+      timeCost: 0,
+      waitingCost: 0,
+      surgeMultiplier: pricing.surgeMultiplier
+    };
+
+    const estimatedFare = (fareBreakdown.base + fareBreakdown.distanceCost + fareBreakdown.timeCost + fareBreakdown.waitingCost) * fareBreakdown.surgeMultiplier;
+
+    // Calculate driver earnings (after commission)
+    const { Commission } = require('../models/commission');
+    const commission = await Commission.findOne({ isActive: true }).sort({ createdAt: -1 });
+    const commissionRate = commission ? commission.percentage : 15; // Default 15%
+    
+    const grossFare = estimatedFare;
+    const commissionAmount = (grossFare * commissionRate) / 100;
+    const netEarnings = grossFare - commissionAmount;
+
+    res.json({
+      bookingId: booking._id,
+      vehicleType: booking.vehicleType,
+      distanceKm: Math.round(distanceKm * 100) / 100,
+      estimatedFare: Math.round(estimatedFare * 100) / 100,
+      fareBreakdown,
+      driverEarnings: {
+        grossFare: Math.round(grossFare * 100) / 100,
+        commissionRate: commissionRate,
+        commissionAmount: Math.round(commissionAmount * 100) / 100,
+        netEarnings: Math.round(netEarnings * 100) / 100
+      },
+      pickup: booking.pickup,
+      dropoff: booking.dropoff
+    });
   } catch (e) {
-    return res.status(500).json({ message: e.message });
+    res.status(500).json({ message: `Failed to estimate fare for driver: ${e.message}` });
   }
+}
+
+module.exports = { 
+  ...base, 
+  setAvailability, 
+  updateLocation, 
+  availableNearby, 
+  estimateFareForPassenger, 
+  estimateFareForDriver 
 };
 
-exports.discoverAndEstimate = async (req, res) => {
+// Combined driver discovery and fare estimation for passengers
+async function discoverAndEstimate(req, res) {
   try {
-    const { pickup, dropoff, vehicleType } = req.body || {};
-    if (!pickup || !dropoff) return res.status(400).json({ message: 'pickup and dropoff are required' });
-    // find nearby available drivers
-    const radiusMeters = Number(req.body?.radiusMeters || 5000);
-    const all = await Driver.find({ availability: true }).select({ _id: 1, name: 1, phone: 1, lastKnownLocation: 1, vehicleType: 1 }).lean();
-    const nearby = all.filter(d => d.lastKnownLocation && geolib.isPointWithinRadius(
-      { latitude: d.lastKnownLocation.latitude, longitude: d.lastKnownLocation.longitude },
+    const { pickup, dropoff, radiusKm = 5, vehicleType } = req.body || {};
+
+    if (!pickup || !dropoff) {
+      return res.status(400).json({ message: 'pickup and dropoff are required' });
+    }
+    if (
+      pickup.latitude == null || pickup.longitude == null ||
+      dropoff.latitude == null || dropoff.longitude == null
+    ) {
+      return res.status(400).json({ message: 'Valid latitude and longitude are required for pickup and dropoff' });
+    }
+
+    // Find nearby available drivers (reuse logic with minimal duplication)
+    const all = await Driver.find({ available: true, ...(vehicleType ? { vehicleType } : {}) });
+    const nearby = all.filter(d => d.lastKnownLocation && distanceKm(d.lastKnownLocation, { latitude: +pickup.latitude, longitude: +pickup.longitude }) <= +radiusKm);
+
+    // Enrich driver data via templated external user directory to target the correct API
+    const { getDriverById: getDriverById2, listDrivers: listDrivers2, getDriversByIds: getDriversByIds2 } = require('../services/userDirectory');
+    const authHeader2 = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
+
+    // Try batch first for efficiency
+    let idToExternal = {};
+    try {
+      const batch = await getDriversByIds2(nearby.map(d => String(d._id)), { headers: authHeader2 });
+      idToExternal = Object.fromEntries((batch || []).map(u => [String(u.id), { name: u.name, phone: u.phone }]));
+    } catch (_) {}
+
+    const drivers = await Promise.all(nearby.map(async (driver) => {
+      const base = {
+        id: String(driver._id),
+        driverId: String(driver._id),
+        vehicleType: driver.vehicleType,
+        rating: driver.rating || 5.0,
+        lastKnownLocation: driver.lastKnownLocation || null,
+        distanceKm: distanceKm(driver.lastKnownLocation, { latitude: +pickup.latitude, longitude: +pickup.longitude })
+      };
+
+      const lookupId = driver.externalId || driver._id;
+      let name = idToExternal[String(lookupId)]?.name || driver.name || undefined;
+      let phone = idToExternal[String(lookupId)]?.phone || driver.phone || undefined;
+      let email = driver.email || undefined;
+      if (!name || !phone) {
+        try {
+          const ext = await getDriverById2(String(lookupId), { headers: authHeader2 });
+          if (ext) {
+            name = name || ext.name;
+            phone = phone || ext.phone;
+            // persist enrichment
+            try {
+              const update = { };
+              if (ext.name && !driver.name) update.name = ext.name;
+              if (ext.phone && !driver.phone) update.phone = ext.phone;
+              if (driver.externalId == null && lookupId !== driver._id) update.externalId = String(lookupId);
+              if (Object.keys(update).length) await Driver.findByIdAndUpdate(driver._id, { $set: update });
+            } catch (_) {}
+          }
+          if ((!name || !phone)) {
+            const list = await listDrivers2({ vehicleType: driver.vehicleType }, { headers: authHeader2 });
+            const match = (list || []).find(u => String(u.id) === String(driver._id));
+            if (match) {
+              name = name || match.name;
+              phone = phone || match.phone;
+              // persist
+              try {
+                const update = { };
+                if (match.name && !driver.name) update.name = match.name;
+                if (match.phone && !driver.phone) update.phone = match.phone;
+                if (Object.keys(update).length) await Driver.findByIdAndUpdate(driver._id, { $set: update });
+              } catch (_) {}
+            }
+          }
+        } catch (_) {}
+      }
+
+      const driverInfo = {
+        id: String(driver._id),
+        name: name || '',
+        phone: phone || '',
+        email: email || '',
+        vehicleType: driver.vehicleType
+      };
+
+      return { ...base, driver: driverInfo };
+    }));
+    drivers.sort((a, b) => a.distanceKm - b.distanceKm);
+
+    // Fare estimation
+    const pricing = await Pricing.findOne({ vehicleType: vehicleType || 'mini', isActive: true }).sort({ updatedAt: -1 });
+    if (!pricing) {
+      return res.status(404).json({ message: `No pricing found for vehicle type: ${vehicleType || 'mini'}` });
+    }
+
+    const distanceKmVal = geolib.getDistance(
       { latitude: pickup.latitude, longitude: pickup.longitude },
-      radiusMeters
-    ));
-    const est = await computeEstimate(vehicleType, pickup, dropoff);
-    return res.json({ nearby: nearby.map(d => ({ id: String(d._id), name: d.name, phone: d.phone, vehicleType: d.vehicleType })), estimate: est });
+      { latitude: dropoff.latitude, longitude: dropoff.longitude }
+    ) / 1000;
+
+    const fareBreakdown = {
+      base: pricing.baseFare,
+      distanceCost: distanceKmVal * pricing.perKm,
+      timeCost: 0,
+      waitingCost: 0,
+      surgeMultiplier: pricing.surgeMultiplier
+    };
+    const estimatedFare = (fareBreakdown.base + fareBreakdown.distanceCost + fareBreakdown.timeCost + fareBreakdown.waitingCost) * fareBreakdown.surgeMultiplier;
+
+    return res.json({
+      drivers,
+      estimate: {
+        vehicleType: vehicleType || 'mini',
+        distanceKm: Math.round(distanceKmVal * 100) / 100,
+        estimatedFare: Math.round(estimatedFare * 100) / 100,
+        fareBreakdown
+      }
+    });
   } catch (e) {
-    return res.status(500).json({ message: e.message });
+    return res.status(500).json({ message: `Failed to discover drivers and estimate fare: ${e.message}` });
   }
-};
+}
+
+module.exports.discoverAndEstimate = discoverAndEstimate;
+
