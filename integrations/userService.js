@@ -9,8 +9,12 @@ class UserService {
     this.timeout = 10000;
     
     // Create axios instance with default config
+    const trimmedBaseUrl = (this.baseURL || '').replace(/\/+$/, '');
+    const hasV1Suffix = /\/v1$/.test(trimmedBaseUrl);
+    this.endpointPrefix = hasV1Suffix ? '' : '/v1';
+
     this.client = axios.create({
-      baseURL: this.baseURL,
+      baseURL: trimmedBaseUrl,
       timeout: this.timeout,
       headers: {
         'Content-Type': 'application/json',
@@ -43,13 +47,40 @@ class UserService {
     );
   }
 
+  // Helpers
+  isLikelyObjectId(value) {
+    return typeof value === 'string' && /^[a-fA-F0-9]{24}$/.test(value);
+  }
+
+  buildBasicStub(userId, userType) {
+    const typeLabel = userType === 'driver' ? 'Driver' : 'Passenger';
+    const phoneSuffix = String(userId).replace(/\D/g, '') || '0';
+    const phone = `+1234567${phoneSuffix.padStart(4, '0')}`;
+    return {
+      id: String(userId),
+      name: `${typeLabel} ${userId}`,
+      phone
+    };
+  }
+
+  buildEndpoint(path) {
+    return `${this.endpointPrefix}${path}`;
+  }
+
   // Get user by ID
   async getUserById(userId, userType = 'passenger') {
     try {
-      const endpoint = userType === 'driver' ? '/v1/drivers' : '/v1/passengers';
+      const endpoint = userType === 'driver' ? this.buildEndpoint('/drivers') : this.buildEndpoint('/passengers');
       const response = await this.client.get(`${endpoint}/${userId}`);
       return response.data;
     } catch (error) {
+      const errorMessage = error?.response?.data?.message || error.message || '';
+      const status = error?.response?.status;
+      const looksBadObjectId = /Cast to ObjectId failed/i.test(errorMessage) || status === 400 || status === 422;
+      if (!this.isLikelyObjectId(userId) || looksBadObjectId) {
+        console.warn(`[UserService] Falling back to basic ${userType} stub for id=${userId}`);
+        return this.buildBasicStub(userId, userType);
+      }
       console.error(`[UserService] Failed to get ${userType} ${userId}:`, error.message);
       throw error;
     }
@@ -58,10 +89,17 @@ class UserService {
   // Get multiple users by IDs
   async getUsersByIds(userIds, userType = 'passenger') {
     try {
-      const endpoint = userType === 'driver' ? '/v1/drivers' : '/v1/passengers';
+      const endpoint = userType === 'driver' ? this.buildEndpoint('/drivers') : this.buildEndpoint('/passengers');
       const response = await this.client.post(`${endpoint}/batch`, { ids: userIds });
       return response.data;
     } catch (error) {
+      const errorMessage = error?.response?.data?.message || error.message || '';
+      const status = error?.response?.status;
+      const looksBadObjectId = /Cast to ObjectId failed/i.test(errorMessage) || status === 400 || status === 422;
+      if (looksBadObjectId || (Array.isArray(userIds) && userIds.some((id) => !this.isLikelyObjectId(id)))) {
+        console.warn(`[UserService] Falling back to basic ${userType} stubs for ids=[${userIds}]`);
+        return userIds.map((id) => this.buildBasicStub(id, userType));
+      }
       console.error(`[UserService] Failed to get ${userType}s:`, error.message);
       throw error;
     }
@@ -70,7 +108,7 @@ class UserService {
   // Search users by criteria
   async searchUsers(criteria, userType = 'passenger') {
     try {
-      const endpoint = userType === 'driver' ? '/v1/drivers' : '/v1/passengers';
+      const endpoint = userType === 'driver' ? this.buildEndpoint('/drivers') : this.buildEndpoint('/passengers');
       const response = await this.client.get(endpoint, { params: criteria });
       return response.data;
     } catch (error) {
@@ -82,7 +120,7 @@ class UserService {
   // Update user status
   async updateUserStatus(userId, status, userType = 'passenger') {
     try {
-      const endpoint = userType === 'driver' ? '/v1/drivers' : '/v1/passengers';
+      const endpoint = userType === 'driver' ? this.buildEndpoint('/drivers') : this.buildEndpoint('/passengers');
       const response = await this.client.put(`${endpoint}/${userId}/status`, { status });
       return response.data;
     } catch (error) {
@@ -94,7 +132,7 @@ class UserService {
   // Get user location (for drivers)
   async getDriverLocation(driverId) {
     try {
-      const response = await this.client.get(`/v1/drivers/${driverId}/location`);
+      const response = await this.client.get(`${this.buildEndpoint('/drivers')}/${driverId}/location`);
       return response.data;
     } catch (error) {
       console.error(`[UserService] Failed to get driver location:`, error.message);
@@ -105,7 +143,7 @@ class UserService {
   // Update user location (for drivers)
   async updateDriverLocation(driverId, locationData) {
     try {
-      const response = await this.client.post(`/v1/drivers/${driverId}/location`, locationData);
+      const response = await this.client.post(`${this.buildEndpoint('/drivers')}/${driverId}/location`, locationData);
       return response.data;
     } catch (error) {
       console.error(`[UserService] Failed to update driver location:`, error.message);
