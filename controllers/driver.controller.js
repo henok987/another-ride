@@ -372,13 +372,28 @@ exports.discoverAndEstimate = async (req, res) => {
     // find nearby available drivers
     const radiusMeters = Number(req.body?.radiusMeters || 5000);
     const all = await Driver.find({ availability: true }).select({ _id: 1, name: 1, phone: 1, lastKnownLocation: 1, vehicleType: 1 }).lean();
-    const nearby = all.filter(d => d.lastKnownLocation && geolib.isPointWithinRadius(
-      { latitude: d.lastKnownLocation.latitude, longitude: d.lastKnownLocation.longitude },
-      { latitude: pickup.latitude, longitude: pickup.longitude },
-      radiusMeters
-    ));
+    const withDistance = all
+      .filter(d => d.lastKnownLocation)
+      .map(d => {
+        const distanceMeters = geolib.getDistance(
+          { latitude: d.lastKnownLocation.latitude, longitude: d.lastKnownLocation.longitude },
+          { latitude: pickup.latitude, longitude: pickup.longitude }
+        );
+        return { ...d, distanceMeters };
+      });
+    const nearby = withDistance.filter(d => d.distanceMeters <= radiusMeters).sort((a, b) => a.distanceMeters - b.distanceMeters);
     const est = await computeEstimate(vehicleType, pickup, dropoff);
-    return res.json({ nearby: nearby.map(d => ({ id: String(d._id), name: d.name, phone: d.phone, vehicleType: d.vehicleType })), estimate: est });
+    return res.json({
+      nearby: nearby.map(d => ({
+        id: String(d._id),
+        name: d.name,
+        phone: d.phone,
+        vehicleType: d.vehicleType,
+        lastKnownLocation: d.lastKnownLocation,
+        distanceMeters: d.distanceMeters
+      })),
+      estimate: est
+    });
   } catch (e) {
     return res.status(500).json({ message: e.message });
   }
