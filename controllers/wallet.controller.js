@@ -1,5 +1,5 @@
 const { Wallet, Transaction } = require('../models/common');
-const { DirectPayment } = require('../integrations/santimpay');
+const { DirectPayment, PayoutB2C } = require('../integrations/santimpay');
 
 exports.topup = async (req, res) => {
   try {
@@ -101,10 +101,15 @@ exports.withdraw = async (req, res) => {
       metadata: { destination }
     });
 
-    // TODO: Implement SantimPay B2C payout call here
-
-    // For now, mark pending and let admin approve/offline payout
-    return res.status(202).json({ message: 'Withdrawal requested', transactionId: String(tx._id) });
+    const notifyUrl = process.env.SANTIMPAY_PAYOUT_NOTIFY_URL || `${process.env.BASE_URL || 'https://example.com'}/v1/wallet/webhook`;
+    try {
+      const response = await PayoutB2C(String(tx._id), amount, destination, notifyUrl, method);
+      await Transaction.findByIdAndUpdate(tx._id, { metadata: { ...tx.metadata, gatewayResponse: response } });
+      return res.status(202).json({ message: 'Withdrawal initiated', transactionId: String(tx._id) });
+    } catch (err) {
+      await Transaction.findByIdAndUpdate(tx._id, { status: 'failed', metadata: { ...tx.metadata, error: err.message } });
+      return res.status(502).json({ message: `Payout failed: ${err.message}` });
+    }
   } catch (e) {
     return res.status(500).json({ message: e.message });
   }
