@@ -35,7 +35,11 @@ module.exports = { getPassengerById };
 
 async function getDriverById(driverId, options = undefined) {
   try {
-    const template = process.env.DRIVER_LOOKUP_URL_TEMPLATE; // e.g. https://authservice.../api/drivers/{id}
+    let template = process.env.DRIVER_LOOKUP_URL_TEMPLATE; // e.g. https://authservice.../api/drivers/{id}
+    if (!template && process.env.AUTH_BASE_URL) {
+      const base = process.env.AUTH_BASE_URL.replace(/\/$/, '');
+      template = `${base}/drivers/{id}`;
+    }
     if (!fetchFn || !template || !driverId) return null;
     const url = buildUrlFromTemplate(template, { id: driverId });
     const headers = { 'Accept': 'application/json' };
@@ -54,6 +58,29 @@ async function getDriverById(driverId, options = undefined) {
 }
 
 module.exports.getDriverById = getDriverById;
+
+async function getDriversByIds(ids = [], options = undefined) {
+  try {
+    const base = process.env.AUTH_BASE_URL;
+    if (!fetchFn || !base || !Array.isArray(ids) || ids.length === 0) return [];
+    const url = `${base.replace(/\/$/, '')}/drivers/batch`;
+    const headers = { 'Accept': 'application/json', 'Content-Type': 'application/json' };
+    const authHeader = options && options.headers && options.headers.Authorization ? options.headers.Authorization : undefined;
+    if (authHeader) headers['Authorization'] = authHeader;
+    else if (process.env.AUTH_SERVICE_BEARER) headers['Authorization'] = `Bearer ${process.env.AUTH_SERVICE_BEARER}`;
+    const res = await fetchFn(url, { method: 'POST', headers, body: JSON.stringify({ ids }) });
+    if (!res.ok) return [];
+    const data = await safeJson(res);
+    const arr = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+    return arr.map(u => ({ id: String(u.id || u._id || ''), name: u.name || u.fullName, phone: u.phone || u.msisdn }));
+  } catch (_) {
+    // Fallback to per-id
+    const results = await Promise.all((ids || []).map(id => getDriverById(id, options)));
+    return results.filter(Boolean);
+  }
+}
+
+module.exports.getDriversByIds = getDriversByIds;
 
 async function listPassengers(query = {}) {
   try {

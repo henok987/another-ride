@@ -161,7 +161,7 @@ async function availableNearby(req, res) {
     const nearby = all.filter(d => d.lastKnownLocation && distanceKm(d.lastKnownLocation, { latitude: +latitude, longitude: +longitude }) <= +radiusKm);
 
     // Enrich driver info via templated external user directory to target the correct API
-    const { getDriverById } = require('../services/userDirectory');
+    const { getDriverById, getDriversByIds } = require('../services/userDirectory');
     const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
 
     const enriched = await Promise.all(nearby.map(async (driver) => {
@@ -383,6 +383,13 @@ async function discoverAndEstimate(req, res) {
     const { getDriverById: getDriverById2 } = require('../services/userDirectory');
     const authHeader2 = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
 
+    // Try batch first for efficiency
+    let idToExternal = {};
+    try {
+      const batch = await getDriversByIds(nearby.map(d => String(d._id)), { headers: authHeader2 });
+      idToExternal = Object.fromEntries((batch || []).map(u => [String(u.id), { name: u.name, phone: u.phone }]));
+    } catch (_) {}
+
     const drivers = await Promise.all(nearby.map(async (driver) => {
       const base = {
         id: String(driver._id),
@@ -393,8 +400,8 @@ async function discoverAndEstimate(req, res) {
         distanceKm: distanceKm(driver.lastKnownLocation, { latitude: +pickup.latitude, longitude: +pickup.longitude })
       };
 
-      let name = driver.name || undefined;
-      let phone = driver.phone || undefined;
+      let name = idToExternal[String(driver._id)]?.name || driver.name || undefined;
+      let phone = idToExternal[String(driver._id)]?.phone || driver.phone || undefined;
       let email = driver.email || undefined;
       if (!name || !phone) {
         try {
