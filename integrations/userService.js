@@ -10,8 +10,15 @@ class UserService {
     
     // Create axios instance with default config
     const trimmedBaseUrl = (this.baseURL || '').replace(/\/+$/, '');
-    const hasV1Suffix = /\/v1$/.test(trimmedBaseUrl);
-    this.endpointPrefix = hasV1Suffix ? '' : '/v1';
+    // Allow overriding the path prefix explicitly
+    const configuredPrefix = process.env.USER_SERVICE_PREFIX;
+    if (configuredPrefix !== undefined) {
+      const normalized = String(configuredPrefix || '').trim();
+      this.endpointPrefix = normalized ? (normalized.startsWith('/') ? normalized : `/${normalized}`) : '';
+    } else {
+      const hasV1Suffix = /\/v1$/.test(trimmedBaseUrl);
+      this.endpointPrefix = hasV1Suffix ? '' : '/v1';
+    }
 
     this.client = axios.create({
       baseURL: trimmedBaseUrl,
@@ -52,10 +59,16 @@ class UserService {
   }
 
   // Get user by ID
-  async getUserById(userId, userType = 'passenger') {
+  async getUserById(userId, userType = 'passenger', options = undefined) {
     try {
       const endpoint = userType === 'driver' ? this.buildEndpoint('/drivers') : this.buildEndpoint('/passengers');
-      const response = await this.client.get(`${endpoint}/${userId}`);
+      const config = {};
+      if (options && options.headers && options.headers.Authorization) {
+        config.headers = { Authorization: options.headers.Authorization };
+      } else if (process.env.AUTH_SERVICE_BEARER) {
+        config.headers = { Authorization: `Bearer ${process.env.AUTH_SERVICE_BEARER}` };
+      }
+      const response = await this.client.get(`${endpoint}/${userId}`, config);
       return response.data;
     } catch (error) {
       console.error(`[UserService] Failed to get ${userType} ${userId}:`, error.message);
@@ -64,10 +77,16 @@ class UserService {
   }
 
   // Get multiple users by IDs
-  async getUsersByIds(userIds, userType = 'passenger') {
+  async getUsersByIds(userIds, userType = 'passenger', options = undefined) {
     try {
       const endpoint = userType === 'driver' ? this.buildEndpoint('/drivers') : this.buildEndpoint('/passengers');
-      const response = await this.client.post(`${endpoint}/batch`, { ids: userIds });
+      const config = {};
+      if (options && options.headers && options.headers.Authorization) {
+        config.headers = { Authorization: options.headers.Authorization };
+      } else if (process.env.AUTH_SERVICE_BEARER) {
+        config.headers = { Authorization: `Bearer ${process.env.AUTH_SERVICE_BEARER}` };
+      }
+      const response = await this.client.post(`${endpoint}/batch`, { ids: userIds }, config);
       return response.data;
     } catch (error) {
       console.error(`[UserService] Failed batch ${userType}s lookup:`, error.message);
@@ -76,7 +95,7 @@ class UserService {
         const perId = await Promise.all(
           (userIds || []).map(async (id) => {
             try {
-              const u = await this.getUserById(id, userType);
+              const u = await this.getUserById(id, userType, options);
               return u ? u : null;
             } catch (_) { return null; }
           })

@@ -162,11 +162,12 @@ async function availableNearby(req, res) {
 
     // Enrich driver info via userService (batch) if local name/phone are missing
     const userService = require('../integrations/userService');
+    const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
     const missingIds = nearby.map(d => String(d._id));
     let idToExternal = {};
     if (missingIds.length) {
       try {
-        const externals = await userService.getUsersByIds(missingIds, 'driver');
+        const externals = await userService.getUsersByIds(missingIds, 'driver', { headers: authHeader });
         idToExternal = Object.fromEntries(
           (externals || []).map(u => [String(u.id || u._id), { name: u.name, phone: u.phone }])
         );
@@ -381,11 +382,12 @@ async function discoverAndEstimate(req, res) {
 
     // Enrich driver data via userService (batch) when missing
     const userService = require('../integrations/userService');
+    const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
     const missingIds = nearby.map(d => String(d._id));
     let idToExternal = {};
     if (missingIds.length) {
       try {
-        const externals = await userService.getUsersByIds(missingIds, 'driver');
+        const externals = await userService.getUsersByIds(missingIds, 'driver', { headers: authHeader });
         idToExternal = Object.fromEntries(
           (externals || []).map(u => [String(u.id || u._id), { name: u.name, phone: u.phone }])
         );
