@@ -179,8 +179,15 @@ async function availableNearby(req, res) {
     const nearby = all.filter(d => d.lastKnownLocation && distanceKm(d.lastKnownLocation, { latitude: +latitude, longitude: +longitude }) <= +radiusKm);
 
     // Enrich driver info via templated external user directory to target the correct API
-    const { getDriverById, getDriversByIds, listDrivers } = require('../services/userDirectory');
+    const { getDriverById, getDriversByIds } = require('../services/userDirectory');
     const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
+
+    // Prefetch external data in batch for better hit rate and performance
+    let batchMap = {};
+    try {
+      const batch = await getDriversByIds(nearby.map(d => String(d._id)), { headers: authHeader });
+      batchMap = Object.fromEntries((batch || []).map(u => [String(u.id), { name: u.name, phone: u.phone, email: u.email }]));
+    } catch (_) {}
 
     const enriched = await Promise.all(nearby.map(async (driver) => {
       const base = {
@@ -196,27 +203,29 @@ async function availableNearby(req, res) {
         distanceKm: distanceKm(driver.lastKnownLocation, { latitude: +latitude, longitude: +longitude })
       };
 
-      const lookupId = driver.externalId || driver._id;
-      let name = undefined;
-      let phone = undefined;
-      let email = undefined;
-      try {
-        const ext = await getDriverById(String(lookupId), { headers: authHeader });
-        if (ext) {
-          name = ext.name;
-          phone = ext.phone;
-          email = ext.email;
-          // persist enrichment for future requests
-          try {
-            const update = { };
-            if (ext.name && !driver.name) update.name = ext.name;
-            if (ext.phone && !driver.phone) update.phone = ext.phone;
-            if (ext.email && !driver.email) update.email = ext.email;
-            if (driver.externalId == null && lookupId !== driver._id) update.externalId = String(lookupId);
-            if (Object.keys(update).length) await Driver.findByIdAndUpdate(driver._id, { $set: update });
-          } catch (_) {}
-        }
-      } catch (_) {}
+      const lookupId = String(driver.externalId || driver._id);
+      let name = batchMap[lookupId]?.name;
+      let phone = batchMap[lookupId]?.phone;
+      let email = batchMap[lookupId]?.email;
+      if (!name || !phone) {
+        try {
+          const ext = await getDriverById(lookupId, { headers: authHeader });
+          if (ext) {
+            name = name || ext.name;
+            phone = phone || ext.phone;
+            email = email || ext.email;
+            // persist enrichment for future requests
+            try {
+              const update = { };
+              if (ext.name && !driver.name) update.name = ext.name;
+              if (ext.phone && !driver.phone) update.phone = ext.phone;
+              if (ext.email && !driver.email) update.email = ext.email;
+              if (driver.externalId == null && lookupId !== String(driver._id)) update.externalId = lookupId;
+              if (Object.keys(update).length) await Driver.findByIdAndUpdate(driver._id, { $set: update });
+            } catch (_) {}
+          }
+        } catch (_) {}
+      }
 
       // Only return drivers with real external data (require name and phone; email optional)
       if (!name || !phone) {
@@ -534,6 +543,31 @@ module.exports.getLocation = async function getLocation(req, res) {
       createdAt: d.createdAt,
       updatedAt: d.updatedAt,
       driver: driverInfo
+    });
+  } catch (e) {
+    return res.status(500).json({ message: e.message });
+  }
+};
+
+// Get driver availability with external service populated driver info
+module.exports.getAvailability = async function getAvailability(req, res) {
+  try {
+    const driverId = String(req.params.id || '');
+    if (!driverId) return res.status(400).json({ message: 'Invalid driver id' });
+    const d = await Driver.findById(driverId).lean();
+    if (!d) return res.status(404).json({ message: 'Driver not found' });
+
+    const { getDriverById } = require('../services/userDirectory');
+    const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
+    const ext = await getDriverById(driverId, { headers: authHeader });
+
+    return res.json({
+      id: String(d._id),
+      driverId: String(d._id),
+      available: !!d.available,
+      vehicleType: d.vehicleType,
+      driver: ext ? { id: String(driverId), name: ext.name, phone: ext.phone, email: ext.email } : { id: String(driverId), name: '', phone: '', email: '' },
+      updatedAt: d.updatedAt
     });
   } catch (e) {
     return res.status(500).json({ message: e.message });

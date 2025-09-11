@@ -11,6 +11,7 @@ router.get('/:id/location', authenticate, ctrl.getLocation);
 // Driver self-service
 // Driver self-service (id inferred from token; param ignored)
 router.post('/:id/availability', authenticate, authorize('driver'), ctrl.setAvailability);
+router.get('/:id/availability', authenticate, ctrl.getAvailability);
 router.post('/:id/location', authenticate, authorize('driver'), ctrl.updateLocation);
 // Map external user service id to internal driver
 router.post('/:id/set-external-id', authenticate, authorize('admin','staff'), async (req, res) => {
