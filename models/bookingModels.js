@@ -1,71 +1,212 @@
+// bookingModels.js
 const mongoose = require('mongoose');
-const { LocationSchema, VehicleTypeEnum } = require('./common');
 
-const BookingStatus = ['requested', 'accepted', 'ongoing', 'completed', 'canceled'];
+/**
+ * Booking Schema
+ * Stores booking lifecycle with denormalized passenger/driver IDs.
+ */
+const BookingSchema = new mongoose.Schema(
+  {
+    passengerId: { type: String, required: true, index: true }, // From User Service
+    driverId: { type: String, index: true }, // From User Service
+    passengerName: { type: String }, // Denormalized (optional)
+    passengerPhone: { type: String }, // Denormalized (optional)
 
-const FareBreakdownSchema = new mongoose.Schema({
-  base: { type: Number, default: 0 },
-  distanceCost: { type: Number, default: 0 },
-  timeCost: { type: Number, default: 0 },
-  waitingCost: { type: Number, default: 0 },
-  surgeMultiplier: { type: Number, default: 1 }
-}, { _id: false });
+    pickup: {
+      latitude: { type: Number, required: true },
+      longitude: { type: Number, required: true },
+      address: { type: String },
+    },
+    dropoff: {
+      latitude: { type: Number, required: true },
+      longitude: { type: Number, required: true },
+      address: { type: String },
+    },
 
-const BookingSchema = new mongoose.Schema({
-  passengerId: { type: String, required: true },
-  passengerName: { type: String },
-  passengerPhone: { type: String },
-  driverId: { type: String },
-  vehicleType: { type: String, enum: VehicleTypeEnum, default: 'mini' },
-  pickup: { type: LocationSchema, required: true },
-  dropoff: { type: LocationSchema, required: true },
-  status: { type: String, enum: BookingStatus, default: 'requested', index: true },
-  fareEstimated: { type: Number, default: 0 },
-  fareFinal: { type: Number, default: 0 },
-  fareBreakdown: { type: FareBreakdownSchema, default: () => ({}) },
-  distanceKm: { type: Number, default: 0 },
-  acceptedAt: { type: Date },
-  startedAt: { type: Date },
-  completedAt: { type: Date },
-  // Rating fields
-  passengerRating: { type: Number, min: 1, max: 5 },
-  driverRating: { type: Number, min: 1, max: 5 },
-  passengerComment: { type: String },
-  driverComment: { type: String }
-}, { timestamps: true, toJSON: { versionKey: false }, toObject: { versionKey: false } });
+    vehicleType: {
+      type: String,
+      enum: ['mini', 'sedan', 'van'],
+      default: 'mini',
+    },
+    status: {
+      type: String,
+      enum: ['requested', 'accepted', 'ongoing', 'completed', 'canceled'],
+      default: 'requested',
+    },
 
-const BookingAssignmentSchema = new mongoose.Schema({
-  bookingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Booking', required: true },
-  dispatcherId: { type: String },
-  driverId: { type: String, required: true },
-  passengerId: { type: String, required: true }
-}, { timestamps: true, toJSON: { versionKey: false }, toObject: { versionKey: false } });
+    // Fare details
+    fareEstimated: { type: Number },
+    fareFinal: { type: Number },
+    fareBreakdown: {
+      base: Number,
+      distanceCost: Number,
+      timeCost: Number,
+      waitingCost: Number,
+      surgeMultiplier: Number,
+    },
+    distanceKm: { type: Number },
 
-const TripHistorySchema = new mongoose.Schema({
-  bookingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Booking', required: true },
-  driverId: { type: String },
-  passengerId: { type: String },
-  dateOfTravel: { type: Date, default: Date.now },
-  status: { type: String, enum: BookingStatus, required: true }
-}, { timestamps: true, toJSON: { versionKey: false }, toObject: { versionKey: false } });
+    // Timestamps for lifecycle
+    acceptedAt: { type: Date },
+    startedAt: { type: Date },
+    completedAt: { type: Date },
 
-const LiveSchema = new mongoose.Schema({
-  tripId: { type: mongoose.Schema.Types.ObjectId, ref: 'TripHistory' },
-  bookingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Booking' },
-  driverId: { type: String },
-  passengerId: { type: String },
-  timestamp: { type: Date, default: Date.now },
-  latitude: { type: Number, required: true },
-  longitude: { type: Number, required: true },
-  status: { type: String, enum: BookingStatus },
-  locationType: { type: String, enum: ['pickup', 'dropoff', 'current'], default: 'current' }
-}, { timestamps: true, toJSON: { versionKey: false }, toObject: { versionKey: false } });
+    // Ratings
+    passengerRating: { type: Number, min: 1, max: 5 },
+    passengerComment: { type: String },
+    driverRating: { type: Number, min: 1, max: 5 },
+    driverComment: { type: String },
+  },
+  { timestamps: true }
+);
 
+BookingSchema.set('toJSON', {
+  virtuals: true,
+  versionKey: false,
+  transform: (_, ret) => {
+    ret.id = String(ret._id);
+    delete ret._id;
+    return ret;
+  },
+});
+
+/**
+ * TripHistory Schema
+ * Logs lifecycle events for a booking.
+ */
+const TripHistorySchema = new mongoose.Schema(
+  {
+    bookingId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Booking',
+      required: true,
+    },
+    driverId: { type: String }, // From User Service
+    passengerId: { type: String }, // From User Service
+    status: {
+      type: String,
+      enum: ['requested', 'accepted', 'ongoing', 'completed', 'canceled'],
+      required: true,
+    },
+
+    fare: { type: Number },
+    distance: { type: Number },
+    duration: { type: Number },
+
+    pickupLocation: {
+      latitude: Number,
+      longitude: Number,
+      address: String,
+    },
+    dropoffLocation: {
+      latitude: Number,
+      longitude: Number,
+      address: String,
+    },
+
+    startTime: { type: Date },
+    endTime: { type: Date },
+    dateOfTravel: { type: Date, default: Date.now },
+    notes: { type: String },
+  },
+  { timestamps: true }
+);
+
+TripHistorySchema.set('toJSON', {
+  virtuals: true,
+  versionKey: false,
+  transform: (_, ret) => {
+    ret.id = String(ret._id);
+    delete ret._id;
+    return ret;
+  },
+});
+
+/**
+ * Live Location Schema
+ * Tracks real-time location updates for trips.
+ */
+const LiveSchema = new mongoose.Schema(
+  {
+    driverId: { type: String, index: true },
+    passengerId: { type: String, index: true },
+
+    latitude: { type: Number, required: true },
+    longitude: { type: Number, required: true },
+
+    status: {
+      type: String,
+      enum: ['moving', 'stopped', 'offline'],
+      default: 'moving',
+    },
+    tripId: { type: String, index: true }, // Logical trip reference
+    locationType: {
+      type: String,
+      enum: ['pickup', 'dropoff', 'current'],
+      default: 'current',
+    },
+
+    bookingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Booking' },
+    timestamp: { type: Date, default: Date.now, index: true },
+  },
+  { timestamps: true }
+);
+
+LiveSchema.set('toJSON', {
+  virtuals: true,
+  versionKey: false,
+  transform: (_, ret) => {
+    ret.id = String(ret._id);
+    delete ret._id;
+    return ret;
+  },
+});
+
+/**
+ * Booking Assignment Schema
+ * Stores dispatcher/driver assignment details for bookings.
+ */
+const BookingAssignmentSchema = new mongoose.Schema(
+  {
+    bookingId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Booking',
+      required: true,
+      unique: true,
+    },
+    driverId: { type: String, required: true, index: true },
+    passengerId: { type: String, required: true, index: true }, // denormalized
+    dispatcherId: { type: String, index: true },
+
+    priority: {
+      type: String,
+      enum: ['low', 'normal', 'high', 'urgent'],
+      default: 'normal',
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'active', 'completed', 'canceled'],
+      default: 'active',
+    },
+    notes: { type: String },
+  },
+  { timestamps: true }
+);
+
+BookingAssignmentSchema.set('toJSON', {
+  virtuals: true,
+  versionKey: false,
+  transform: (_, ret) => {
+    ret.id = String(ret._id);
+    delete ret._id;
+    return ret;
+  },
+});
+
+// Export all models
 module.exports = {
   Booking: mongoose.model('Booking', BookingSchema),
-  BookingAssignment: mongoose.model('BookingAssignment', BookingAssignmentSchema),
   TripHistory: mongoose.model('TripHistory', TripHistorySchema),
   Live: mongoose.model('Live', LiveSchema),
-  BookingStatus
+  BookingAssignment: mongoose.model('BookingAssignment', BookingAssignmentSchema),
 };
-
