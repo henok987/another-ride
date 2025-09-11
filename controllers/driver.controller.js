@@ -178,15 +178,24 @@ async function availableNearby(req, res) {
         distanceKm: distanceKm(driver.lastKnownLocation, { latitude: +latitude, longitude: +longitude })
       };
 
+      const lookupId = driver.externalId || driver._id;
       let name = driver.name || undefined;
       let phone = driver.phone || undefined;
       let email = driver.email || undefined;
       if (!name || !phone) {
         try {
-          const ext = await getDriverById(String(driver._id), { headers: authHeader });
+          const ext = await getDriverById(String(lookupId), { headers: authHeader });
           if (ext) {
             name = name || ext.name;
             phone = phone || ext.phone;
+            // persist enrichment for future requests
+            try {
+              const update = { };
+              if (ext.name && !driver.name) update.name = ext.name;
+              if (ext.phone && !driver.phone) update.phone = ext.phone;
+              if (driver.externalId == null && lookupId !== driver._id) update.externalId = String(lookupId);
+              if (Object.keys(update).length) await Driver.findByIdAndUpdate(driver._id, { $set: update });
+            } catch (_) {}
           }
           // If still missing, try listing by vehicleType or generic listing and match by id
           if ((!name || !phone)) {
@@ -195,6 +204,13 @@ async function availableNearby(req, res) {
             if (match) {
               name = name || match.name;
               phone = phone || match.phone;
+              // persist
+              try {
+                const update = { };
+                if (match.name && !driver.name) update.name = match.name;
+                if (match.phone && !driver.phone) update.phone = match.phone;
+                if (Object.keys(update).length) await Driver.findByIdAndUpdate(driver._id, { $set: update });
+              } catch (_) {}
             }
           }
         } catch (_) {}
@@ -409,15 +425,24 @@ async function discoverAndEstimate(req, res) {
         distanceKm: distanceKm(driver.lastKnownLocation, { latitude: +pickup.latitude, longitude: +pickup.longitude })
       };
 
-      let name = idToExternal[String(driver._id)]?.name || driver.name || undefined;
-      let phone = idToExternal[String(driver._id)]?.phone || driver.phone || undefined;
+      const lookupId = driver.externalId || driver._id;
+      let name = idToExternal[String(lookupId)]?.name || driver.name || undefined;
+      let phone = idToExternal[String(lookupId)]?.phone || driver.phone || undefined;
       let email = driver.email || undefined;
       if (!name || !phone) {
         try {
-          const ext = await getDriverById2(String(driver._id), { headers: authHeader2 });
+          const ext = await getDriverById2(String(lookupId), { headers: authHeader2 });
           if (ext) {
             name = name || ext.name;
             phone = phone || ext.phone;
+            // persist enrichment
+            try {
+              const update = { };
+              if (ext.name && !driver.name) update.name = ext.name;
+              if (ext.phone && !driver.phone) update.phone = ext.phone;
+              if (driver.externalId == null && lookupId !== driver._id) update.externalId = String(lookupId);
+              if (Object.keys(update).length) await Driver.findByIdAndUpdate(driver._id, { $set: update });
+            } catch (_) {}
           }
           if ((!name || !phone)) {
             const list = await listDrivers2({ vehicleType: driver.vehicleType }, { headers: authHeader2 });
@@ -425,6 +450,13 @@ async function discoverAndEstimate(req, res) {
             if (match) {
               name = name || match.name;
               phone = phone || match.phone;
+              // persist
+              try {
+                const update = { };
+                if (match.name && !driver.name) update.name = match.name;
+                if (match.phone && !driver.phone) update.phone = match.phone;
+                if (Object.keys(update).length) await Driver.findByIdAndUpdate(driver._id, { $set: update });
+              } catch (_) {}
             }
           }
         } catch (_) {}
