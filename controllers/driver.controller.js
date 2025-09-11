@@ -161,7 +161,7 @@ async function availableNearby(req, res) {
     const nearby = all.filter(d => d.lastKnownLocation && distanceKm(d.lastKnownLocation, { latitude: +latitude, longitude: +longitude }) <= +radiusKm);
 
     // Enrich driver info via templated external user directory to target the correct API
-    const { getDriverById, getDriversByIds } = require('../services/userDirectory');
+    const { getDriverById, getDriversByIds, listDrivers } = require('../services/userDirectory');
     const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
 
     const enriched = await Promise.all(nearby.map(async (driver) => {
@@ -187,6 +187,15 @@ async function availableNearby(req, res) {
           if (ext) {
             name = name || ext.name;
             phone = phone || ext.phone;
+          }
+          // If still missing, try listing by vehicleType or generic listing and match by id
+          if ((!name || !phone)) {
+            const list = await listDrivers({ vehicleType: driver.vehicleType }, { headers: authHeader });
+            const match = (list || []).find(u => String(u.id) === String(driver._id));
+            if (match) {
+              name = name || match.name;
+              phone = phone || match.phone;
+            }
           }
         } catch (_) {}
       }
@@ -380,13 +389,13 @@ async function discoverAndEstimate(req, res) {
     const nearby = all.filter(d => d.lastKnownLocation && distanceKm(d.lastKnownLocation, { latitude: +pickup.latitude, longitude: +pickup.longitude }) <= +radiusKm);
 
     // Enrich driver data via templated external user directory to target the correct API
-    const { getDriverById: getDriverById2 } = require('../services/userDirectory');
+    const { getDriverById: getDriverById2, listDrivers: listDrivers2, getDriversByIds: getDriversByIds2 } = require('../services/userDirectory');
     const authHeader2 = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
 
     // Try batch first for efficiency
     let idToExternal = {};
     try {
-      const batch = await getDriversByIds(nearby.map(d => String(d._id)), { headers: authHeader2 });
+      const batch = await getDriversByIds2(nearby.map(d => String(d._id)), { headers: authHeader2 });
       idToExternal = Object.fromEntries((batch || []).map(u => [String(u.id), { name: u.name, phone: u.phone }]));
     } catch (_) {}
 
@@ -409,6 +418,14 @@ async function discoverAndEstimate(req, res) {
           if (ext) {
             name = name || ext.name;
             phone = phone || ext.phone;
+          }
+          if ((!name || !phone)) {
+            const list = await listDrivers2({ vehicleType: driver.vehicleType }, { headers: authHeader2 });
+            const match = (list || []).find(u => String(u.id) === String(driver._id));
+            if (match) {
+              name = name || match.name;
+              phone = phone || match.phone;
+            }
           }
         } catch (_) {}
       }

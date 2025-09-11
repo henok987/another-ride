@@ -82,14 +82,16 @@ async function getDriversByIds(ids = [], options = undefined) {
 
 module.exports.getDriversByIds = getDriversByIds;
 
-async function listPassengers(query = {}) {
+async function listPassengers(query = {}, options = undefined) {
   try {
     const base = process.env.AUTH_BASE_URL;
     if (!fetchFn || !base) return [];
     const url = new URL(`${base.replace(/\/$/, '')}/passengers`);
     Object.entries(query).forEach(([k, v]) => { if (v != null) url.searchParams.set(k, v); });
     const headers = { 'Accept': 'application/json' };
-    if (process.env.AUTH_SERVICE_BEARER) headers['Authorization'] = `Bearer ${process.env.AUTH_SERVICE_BEARER}`;
+    const authHeader = options && options.headers && options.headers.Authorization ? options.headers.Authorization : undefined;
+    if (authHeader) headers['Authorization'] = authHeader;
+    else if (process.env.AUTH_SERVICE_BEARER) headers['Authorization'] = `Bearer ${process.env.AUTH_SERVICE_BEARER}`;
     const res = await fetchFn(url.toString(), { headers });
     if (!res.ok) return [];
     const data = await safeJson(res);
@@ -98,14 +100,16 @@ async function listPassengers(query = {}) {
   } catch (_) { return []; }
 }
 
-async function listDrivers(query = {}) {
+async function listDrivers(query = {}, options = undefined) {
   try {
     const base = process.env.AUTH_BASE_URL;
     if (!fetchFn || !base) return [];
     const url = new URL(`${base.replace(/\/$/, '')}/drivers`);
     Object.entries(query).forEach(([k, v]) => { if (v != null) url.searchParams.set(k, v); });
     const headers = { 'Accept': 'application/json' };
-    if (process.env.AUTH_SERVICE_BEARER) headers['Authorization'] = `Bearer ${process.env.AUTH_SERVICE_BEARER}`;
+    const authHeader = options && options.headers && options.headers.Authorization ? options.headers.Authorization : undefined;
+    if (authHeader) headers['Authorization'] = authHeader;
+    else if (process.env.AUTH_SERVICE_BEARER) headers['Authorization'] = `Bearer ${process.env.AUTH_SERVICE_BEARER}`;
     const res = await fetchFn(url.toString(), { headers });
     if (!res.ok) return [];
     const data = await safeJson(res);
