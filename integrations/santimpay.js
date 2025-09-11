@@ -1,5 +1,7 @@
 const crypto = require('crypto');
 const fetch = require('node-fetch');
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
 const BASE_URL = process.env.SANTIMPAY_BASE_URL || 'https://gateway.santimpay.com/api';
@@ -22,6 +24,20 @@ function normalizePemString(maybePem) {
     return `-----BEGIN PRIVATE KEY-----\n${chunks.join('\n')}\n-----END PRIVATE KEY-----\n`;
   }
   return key;
+}
+
+function readTextIfPath(maybePath) {
+  if (!maybePath) return null;
+  const candidate = String(maybePath).trim();
+  // If it looks like an absolute or relative path and exists, read it
+  const looksLikePath = candidate.endsWith('.pem') || candidate.includes('/') || candidate.includes('\\');
+  if (looksLikePath) {
+    const resolved = path.isAbsolute(candidate) ? candidate : path.join(process.cwd(), candidate);
+    if (fs.existsSync(resolved)) {
+      return fs.readFileSync(resolved, 'utf8');
+    }
+  }
+  return null;
 }
 
 function importPrivateKey(pem) {
@@ -95,6 +111,20 @@ function signES256(payload, privateKeyPem) {
   return `${unsigned}.${signature}`;
 }
 
+function getPrivateKeyMaterial() {
+  // Priority: explicit file env -> env content -> env path-like -> error
+  const fileFromEnv = process.env.PRIVATE_KEY_FILE || process.env.PRIVATE_KEY_PATH;
+  const fromExplicitFile = readTextIfPath(fileFromEnv);
+  if (fromExplicitFile) return fromExplicitFile;
+
+  const inline = process.env.PRIVATE_KEY_IN_PEM || process.env.PRIVATE_KEY || '';
+  if (inline) {
+    const fromInlinePath = readTextIfPath(inline);
+    return fromInlinePath || inline;
+  }
+  throw new Error('Missing PRIVATE_KEY_IN_PEM or PRIVATE_KEY_FILE');
+}
+
 async function generateSignedTokenForDirectPayment(amount, paymentReason, paymentMethod, phoneNumber) {
   const time = Math.floor(Date.now() / 1000);
   const payload = {
@@ -105,7 +135,8 @@ async function generateSignedTokenForDirectPayment(amount, paymentReason, paymen
     merchantId: GATEWAY_MERCHANT_ID,
     generated: time
   };
-  const token = signES256(payload, process.env.PRIVATE_KEY_IN_PEM);
+  const privateKeyMaterial = getPrivateKeyMaterial();
+  const token = signES256(payload, privateKeyMaterial);
   return token;
 }
 
