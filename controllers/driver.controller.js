@@ -183,40 +183,14 @@ async function availableNearby(req, res) {
     
     // Enrich each driver with external service data
     const enrichedDrivers = await Promise.all(localDrivers.map(async (driver) => {
-      let externalData = {};
-      
-      // Try to get driver info from external service
-      try {
-        const externalDriver = await getDriverById(String(driver._id), { headers: authHeader });
-        if (externalDriver) {
-          externalData = {
-            name: externalDriver.name || driver.name || 'Driver',
-            phone: externalDriver.phone || driver.phone || 'N/A',
-            email: externalDriver.email || driver.email || 'N/A'
-          };
-          
-          // Update local database with external data
-          try {
-            await Driver.findByIdAndUpdate(driver._id, {
-              $set: {
-                name: externalDriver.name || driver.name,
-                phone: externalDriver.phone || driver.phone,
-                email: externalDriver.email || driver.email
-              }
-            });
-          } catch (updateError) {
-            console.log(`⚠️ Could not update driver ${driver._id} with external data:`, updateError.message);
-          }
-        }
-      } catch (error) {
-        console.log(`⚠️ Could not fetch external data for driver ${driver._id}:`, error.message);
-      }
+      // Get driver info from external service
+      const externalDriver = await getDriverById(String(driver._id), { headers: authHeader });
       
       return {
         id: String(driver._id),
-        name: externalData.name || driver.name || 'Driver',
-        phone: externalData.phone || driver.phone || 'N/A',
-        email: externalData.email || driver.email || 'N/A',
+        name: externalDriver?.name || 'Driver',
+        phone: externalDriver?.phone || 'N/A',
+        email: externalDriver?.email || 'N/A',
         vehicleType: driver.vehicleType,
         available: driver.available,
         rating: driver.rating,
@@ -497,40 +471,14 @@ async function discoverAndEstimate(req, res) {
     
     // Enrich each driver with external service data
     const enrichedDrivers = await Promise.all(localDrivers.map(async (driver) => {
-      let externalData = {};
-      
-      // Try to get driver info from external service
-      try {
-        const externalDriver = await getDriverById(String(driver._id), { headers: authHeader });
-        if (externalDriver) {
-          externalData = {
-            name: externalDriver.name || driver.name || 'Driver',
-            phone: externalDriver.phone || driver.phone || 'N/A',
-            email: externalDriver.email || driver.email || 'N/A'
-          };
-          
-          // Update local database with external data
-          try {
-            await Driver.findByIdAndUpdate(driver._id, {
-              $set: {
-                name: externalDriver.name || driver.name,
-                phone: externalDriver.phone || driver.phone,
-                email: externalDriver.email || driver.email
-              }
-            });
-          } catch (updateError) {
-            console.log(`⚠️ Could not update driver ${driver._id} with external data:`, updateError.message);
-          }
-        }
-      } catch (error) {
-        console.log(`⚠️ Could not fetch external data for driver ${driver._id}:`, error.message);
-      }
+      // Get driver info from external service
+      const externalDriver = await getDriverById(String(driver._id), { headers: authHeader });
       
       return {
         id: String(driver._id),
-        name: externalData.name || driver.name || 'Driver',
-        phone: externalData.phone || driver.phone || 'N/A',
-        email: externalData.email || driver.email || 'N/A',
+        name: externalDriver?.name || 'Driver',
+        phone: externalDriver?.phone || 'N/A',
+        email: externalDriver?.email || 'N/A',
         vehicleType: driver.vehicleType,
         available: driver.available,
         rating: driver.rating,
