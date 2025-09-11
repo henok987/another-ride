@@ -12,6 +12,8 @@ function normalizePemString(maybePem) {
   if (key.includes('\\n') && !key.includes('\n')) {
     key = key.replace(/\\n/g, '\n');
   }
+  // Normalize CRLF to LF
+  key = key.replace(/\r\n/g, '\n');
   // If it's base64 without headers, wrap as PKCS8
   const looksLikeBase64 = /^[A-Za-z0-9+/=\s]+$/.test(key) && !key.includes('BEGIN');
   if (looksLikeBase64) {
@@ -24,12 +26,28 @@ function normalizePemString(maybePem) {
 
 function importPrivateKey(pem) {
   const normalized = normalizePemString(pem);
-  // Try PKCS8 first (-----BEGIN PRIVATE KEY-----), then SEC1 EC (-----BEGIN EC PRIVATE KEY-----)
+  // Support JWK in env (stringified JSON)
+  const trimmed = String(pem || '').trim();
+  if (trimmed.startsWith('{')) {
+    try {
+      const jwk = JSON.parse(trimmed);
+      return crypto.createPrivateKey({ key: jwk, format: 'jwk' });
+    } catch (err) {
+      // fallthrough to PEM attempts below
+    }
+  }
+  // Try Node auto-detection first
+  let lastError;
+  try {
+    return crypto.createPrivateKey({ key: normalized, format: 'pem' });
+  } catch (err) {
+    lastError = err;
+  }
+  // Try explicit types
   const candidates = [
     { type: 'pkcs8', format: 'pem' },
     { type: 'sec1', format: 'pem' }
   ];
-  let lastError;
   for (const opts of candidates) {
     try {
       return crypto.createPrivateKey({ key: normalized, format: opts.format, type: opts.type });
@@ -37,7 +55,11 @@ function importPrivateKey(pem) {
       lastError = err;
     }
   }
-  const help = 'Ensure the private key is an EC P-256 key in PKCS8 (BEGIN PRIVATE KEY) or SEC1 (BEGIN EC PRIVATE KEY) PEM format. If stored in an env var, include literal newlines or use \\n and we will normalize.';
+  // Provide actionable diagnostics
+  if (/BEGIN RSA PRIVATE KEY/.test(normalized)) {
+    throw new Error('Failed to import private key: RSA key provided. ES256 requires an EC P-256 key.');
+  }
+  const help = 'Ensure the private key is an EC P-256 key in PKCS8 (BEGIN PRIVATE KEY) or SEC1 (BEGIN EC PRIVATE KEY) PEM format, or a JWK with kty=EC, crv=P-256. If stored in an env var, include literal newlines or use \\n.';
   const error = new Error(`Failed to import private key. ${help}`);
   error.cause = lastError;
   throw error;
