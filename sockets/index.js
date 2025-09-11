@@ -7,6 +7,8 @@ function attachSocketHandlers(io) {
     socket.on('booking_request', async (payload) => {
       try {
         const { Booking } = require('../models/bookingModels');
+        const { Pricing } = require('../models/pricing');
+        const geolib = require('geolib');
         const { authenticateSocket } = require('./socketAuth');
 
         const user = await authenticateSocket(socket);
@@ -20,12 +22,32 @@ function attachSocketHandlers(io) {
           return socket.emit('booking_error', { message: 'pickup and dropoff with valid coordinates are required' });
         }
 
+        // Estimate pricing immediately
+        const distanceKm = geolib.getDistance(
+          { latitude: pickup.latitude, longitude: pickup.longitude },
+          { latitude: dropoff.latitude, longitude: dropoff.longitude }
+        ) / 1000;
+        const pricing = await Pricing.findOne({ vehicleType: payload?.vehicleType || 'mini', isActive: true }).sort({ updatedAt: -1 });
+        const p = pricing || { baseFare: 2, perKm: 1, perMinute: 0, waitingPerMinute: 0, surgeMultiplier: 1 };
+        const fareBreakdown = {
+          base: p.baseFare,
+          distanceCost: distanceKm * p.perKm,
+          timeCost: 0,
+          waitingCost: 0,
+          surgeMultiplier: p.surgeMultiplier
+        };
+        const fareEstimated = (fareBreakdown.base + fareBreakdown.distanceCost + fareBreakdown.timeCost + fareBreakdown.waitingCost) * fareBreakdown.surgeMultiplier;
+
         const booking = await Booking.create({
           passengerId: String(user.id),
           passengerName: user.name,
           passengerPhone: user.phone,
+          vehicleType: payload?.vehicleType || 'mini',
           pickup: { latitude: pickup.latitude, longitude: pickup.longitude },
           dropoff: { latitude: dropoff.latitude, longitude: dropoff.longitude },
+          distanceKm,
+          fareEstimated,
+          fareBreakdown,
           status: 'requested'
         });
 
@@ -33,8 +55,12 @@ function attachSocketHandlers(io) {
           id: String(booking._id),
           passengerId: booking.passengerId,
           passenger: { id: String(user.id), name: user.name, phone: user.phone, email: user.email },
+          vehicleType: booking.vehicleType,
           pickup: booking.pickup,
           dropoff: booking.dropoff,
+          distanceKm,
+          fareEstimated,
+          fareBreakdown,
           status: booking.status,
           createdAt: booking.createdAt
         };

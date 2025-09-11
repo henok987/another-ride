@@ -40,21 +40,14 @@ exports.bookingProgress = async (req, res) => {
           email: req.user.email
         };
       } else {
-        // Fallback to stored passenger data
-        passenger = { 
-          id: String(booking.passengerId), 
-          name: booking.passengerName, 
-          phone: booking.passengerPhone 
-        };
-      }
-      
-      // Generic fallback for testing
-      if (!passenger) {
-        passenger = { 
-          id: String(booking.passengerId), 
-          name: `Passenger ${booking.passengerId}`, 
-          phone: `+123456789${booking.passengerId}` 
-        };
+        // Use stored passenger data only if present; otherwise leave undefined
+        if (booking.passengerName || booking.passengerPhone) {
+          passenger = { 
+            id: String(booking.passengerId), 
+            name: booking.passengerName, 
+            phone: booking.passengerPhone 
+          };
+        }
       }
     }
     return res.json({ 

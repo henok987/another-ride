@@ -47,22 +47,6 @@ class UserService {
     );
   }
 
-  // Helpers
-  isLikelyObjectId(value) {
-    return typeof value === 'string' && /^[a-fA-F0-9]{24}$/.test(value);
-  }
-
-  buildBasicStub(userId, userType) {
-    const typeLabel = userType === 'driver' ? 'Driver' : 'Passenger';
-    const phoneSuffix = String(userId).replace(/\D/g, '') || '0';
-    const phone = `+1234567${phoneSuffix.padStart(4, '0')}`;
-    return {
-      id: String(userId),
-      name: `${typeLabel} ${userId}`,
-      phone
-    };
-  }
-
   buildEndpoint(path) {
     return `${this.endpointPrefix}${path}`;
   }
@@ -74,13 +58,6 @@ class UserService {
       const response = await this.client.get(`${endpoint}/${userId}`);
       return response.data;
     } catch (error) {
-      const errorMessage = error?.response?.data?.message || error.message || '';
-      const status = error?.response?.status;
-      const looksBadObjectId = /Cast to ObjectId failed/i.test(errorMessage) || status === 400 || status === 422;
-      if (!this.isLikelyObjectId(userId) || looksBadObjectId) {
-        console.warn(`[UserService] Falling back to basic ${userType} stub for id=${userId}`);
-        return this.buildBasicStub(userId, userType);
-      }
       console.error(`[UserService] Failed to get ${userType} ${userId}:`, error.message);
       throw error;
     }
@@ -93,13 +70,6 @@ class UserService {
       const response = await this.client.post(`${endpoint}/batch`, { ids: userIds });
       return response.data;
     } catch (error) {
-      const errorMessage = error?.response?.data?.message || error.message || '';
-      const status = error?.response?.status;
-      const looksBadObjectId = /Cast to ObjectId failed/i.test(errorMessage) || status === 400 || status === 422;
-      if (looksBadObjectId || (Array.isArray(userIds) && userIds.some((id) => !this.isLikelyObjectId(id)))) {
-        console.warn(`[UserService] Falling back to basic ${userType} stubs for ids=[${userIds}]`);
-        return userIds.map((id) => this.buildBasicStub(id, userType));
-      }
       console.error(`[UserService] Failed to get ${userType}s:`, error.message);
       throw error;
     }

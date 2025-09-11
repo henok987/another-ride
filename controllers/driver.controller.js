@@ -175,12 +175,12 @@ async function availableNearby(req, res) {
         distanceKm: distanceKm(driver.lastKnownLocation, { latitude: +latitude, longitude: +longitude })
       };
       
-      // Use local driver data if available, otherwise generic fallback
+      // Use local driver data only; no generic fallback
       const driverInfo = {
         id: String(driver._id),
-        name: driver.name || `Driver ${driver._id}`,
-        phone: driver.phone || `+123456789${driver._id}`,
-        email: driver.email || `driver${driver._id}@example.com`,
+        name: driver.name,
+        phone: driver.phone,
+        email: driver.email,
         vehicleType: driver.vehicleType
       };
       
@@ -364,7 +364,7 @@ async function discoverAndEstimate(req, res) {
     const all = await Driver.find({ available: true, ...(vehicleType ? { vehicleType } : {}) });
     const nearby = all.filter(d => d.lastKnownLocation && distanceKm(d.lastKnownLocation, { latitude: +pickup.latitude, longitude: +pickup.longitude }) <= +radiusKm);
 
-    // Use local driver data instead of external service calls
+    // Use local driver data only
     const drivers = nearby.map((driver) => {
       const base = {
         id: String(driver._id),
@@ -375,12 +375,12 @@ async function discoverAndEstimate(req, res) {
         distanceKm: distanceKm(driver.lastKnownLocation, { latitude: +pickup.latitude, longitude: +pickup.longitude })
       };
       
-      // Use local driver data if available, otherwise generic fallback
+      // Use local driver data only; no generic fallback
       const driverInfo = {
         id: String(driver._id),
-        name: driver.name || `Driver ${driver._id}`,
-        phone: driver.phone || `+123456789${driver._id}`,
-        email: driver.email || `driver${driver._id}@example.com`,
+        name: driver.name,
+        phone: driver.phone,
+        email: driver.email,
         vehicleType: driver.vehicleType
       };
       

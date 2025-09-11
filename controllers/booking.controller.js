@@ -55,12 +55,9 @@ exports.create = async (req, res) => {
     let passengerName = tokenMeta.name || p?.name || undefined;
     let passengerPhone = tokenMeta.phone || p?.phone || undefined;
     
-    // Fallback: Use hardcoded passenger data for testing (based on your JWT token)
+    // Require real passenger identity
     if (!passengerName || !passengerPhone) {
-      console.log('Using fallback passenger data for testing');
-      // Use generic fallback data instead of hardcoded specific user
-      passengerName = passengerName || `Passenger ${passengerId}`;
-      passengerPhone = passengerPhone || `+123456789${passengerId}`;
+      return res.status(422).json({ message: 'Passenger name and phone are required from auth token or user directory' });
     }
     
     if (!passengerName || !passengerPhone) {
@@ -186,21 +183,7 @@ exports.list = async (req, res) => {
         console.log('Failed to fetch additional passengers from external service:', e.message);
       }
       
-      // Fallback: Create mock passenger data for testing
-      if (Object.keys(additionalPassengers).length === 0) {
-        console.log('Creating fallback passenger data for testing');
-        additionalPassengers = Object.fromEntries(
-          nonObjectIdPassengerIds.map(id => [
-            id, 
-            { 
-              id: id, 
-              name: `Passenger ${id}`, 
-              phone: `+123456789${id}` 
-            }
-          ])
-        );
-        console.log('Fallback passenger data:', additionalPassengers);
-      }
+      // Do not generate mock passengers
     }
     
     // Get passenger info from JWT token if available
@@ -219,7 +202,7 @@ exports.list = async (req, res) => {
     }
 
     const normalized = rows.map(b => {
-      // Priority order: JWT token data > Stored booking data > Database lookup > Fallback
+      // Priority order: JWT token data > Stored booking data > Database lookup > External
       let passenger = undefined;
       
       // 1. Try JWT passenger info first (most current)
@@ -242,11 +225,7 @@ exports.list = async (req, res) => {
         passenger = additionalPassengers[b.passengerId];
         console.log(`Using additional passenger data for booking ${b._id}:`, passenger);
       }
-      // 5. Fallback to generic data for testing
-      else {
-        passenger = { id: String(b.passengerId), name: `Passenger ${b.passengerId}`, phone: `+123456789${b.passengerId}` };
-        console.log(`Using generic fallback passenger data for booking ${b._id}:`, passenger);
-      }
+      // 5. If still missing, leave passenger undefined (no mock)
       
       console.log(`Final passenger for booking ${b._id}:`, passenger);
       
