@@ -248,13 +248,18 @@ exports.getDriverEarnings = async (req, res) => {
       dateFilter = { tripDate: { $gte: new Date(startDate), $lte: new Date(endDate) } };
     }
 
-    const earnings = await DriverEarnings.find({
-      driverId: driverIdFilter,
+    let earnings = await DriverEarnings.find({
+      driverId: String(driverIdFilter),
       ...dateFilter
     }).populate('bookingId').sort({ tripDate: -1 });
+    // Only include completed bookings
+    earnings = earnings.filter(e => e.bookingId && e.bookingId.status === 'completed');
 
     const summary = await DriverEarnings.aggregate([
-      { $match: { driverId: driverIdFilter, ...dateFilter } },
+      { $match: { driverId: String(driverIdFilter), ...dateFilter } },
+      { $lookup: { from: 'bookings', localField: 'bookingId', foreignField: '_id', as: 'booking' } },
+      { $unwind: '$booking' },
+      { $match: { 'booking.status': 'completed' } },
       {
         $group: {
           _id: null,
