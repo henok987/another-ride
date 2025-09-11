@@ -16,6 +16,7 @@ router.use('/drivers', require('./driver.routes'));
 router.use('/mapping', require('./mapping.routes'));
 router.use('/passengers', require('./passenger.routes'));
 router.use('/analytics', require('./analytics.routes'));
+router.use('/wallet', require('./wallet.routes'));
 
 module.exports = router;
 
