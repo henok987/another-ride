@@ -123,7 +123,12 @@ async function getDriversByIds(ids = [], options = undefined) {
     if (authHeader) headers['Authorization'] = authHeader;
     else if (process.env.AUTH_SERVICE_BEARER) headers['Authorization'] = `Bearer ${process.env.AUTH_SERVICE_BEARER}`;
     const res = await fetchFn(url, { method: 'POST', headers, body: JSON.stringify({ ids }) });
-    if (!res.ok) { console.warn(`[userDirectory.getDriversByIds] non-OK status ${res.status} for ${url}`); return []; }
+    if (!res.ok) {
+      console.warn(`[userDirectory.getDriversByIds] non-OK status ${res.status} for ${url}`);
+      // Fallback to per-id fetches
+      const results = await Promise.all((ids || []).map(id => getDriverById(id, options)));
+      return results.filter(Boolean);
+    }
     const data = await safeJson(res);
     const arr = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
     return arr.map(u => ({

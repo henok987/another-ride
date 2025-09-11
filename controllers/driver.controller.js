@@ -93,7 +93,8 @@ async function setAvailability(req, res) {
     // Fetch driver information from external service (no JWT fallback)
     const { getDriverById } = require('../services/userDirectory');
     const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
-    const ext = await getDriverById(String(driverId), { headers: authHeader });
+    const lookupIdAvail = String(d.externalId || driverId);
+    const ext = await getDriverById(lookupIdAvail, { headers: authHeader });
     const driverInfo = ext ? {
       id: String(driverId),
       name: ext.name,
@@ -141,7 +142,8 @@ async function updateLocation(req, res) {
     // Fetch driver information from external service (no JWT fallback)
     const { getDriverById: getDriverByIdA } = require('../services/userDirectory');
     const authHeaderA = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
-    const extA = await getDriverByIdA(String(driverId), { headers: authHeaderA });
+    const lookupIdLoc = String(d.externalId || driverId);
+    const extA = await getDriverByIdA(lookupIdLoc, { headers: authHeaderA });
     const driverInfo = extA ? {
       id: String(driverId),
       name: extA.name,
@@ -524,7 +526,8 @@ module.exports.getLocation = async function getLocation(req, res) {
 
     const { getDriverById } = require('../services/userDirectory');
     const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
-    const ext = await getDriverById(String(driverId), { headers: authHeader });
+    const lookupId = String(d.externalId || driverId);
+    const ext = await getDriverById(lookupId, { headers: authHeader });
 
     const driverInfo = ext ? {
       id: String(driverId),
