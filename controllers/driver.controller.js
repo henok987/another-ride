@@ -1,6 +1,7 @@
 const { Driver } = require('../models/userModels');
 const { crudController } = require('./basic.crud');
 const { Pricing } = require('../models/pricing');
+const { Commission } = require('../models/commission');
 const geolib = require('geolib');
 
 const base = {
@@ -307,10 +308,16 @@ async function estimateFareForPassenger(req, res) {
     ) / 1000;
 
     // Get pricing for vehicle type
-    const pricing = await Pricing.findOne({ vehicleType, isActive: true }).sort({ updatedAt: -1 });
-    
-    if (!pricing) {
-      return res.status(404).json({ message: `No pricing found for vehicle type: ${vehicleType}` });
+    let pricing;
+    try {
+      pricing = await Pricing.findOne({ vehicleType, isActive: true }).sort({ updatedAt: -1 });
+      
+      if (!pricing) {
+        return res.status(404).json({ message: `No pricing found for vehicle type: ${vehicleType}` });
+      }
+    } catch (error) {
+      console.error('Error finding pricing:', error);
+      return res.status(500).json({ message: `Database error: ${error.message}` });
     }
 
     // Calculate fare breakdown
@@ -371,10 +378,16 @@ async function estimateFareForDriver(req, res) {
     }
 
     // Get pricing for vehicle type
-    const pricing = await Pricing.findOne({ vehicleType: booking.vehicleType, isActive: true }).sort({ updatedAt: -1 });
-    
-    if (!pricing) {
-      return res.status(404).json({ message: `No pricing found for vehicle type: ${booking.vehicleType}` });
+    let pricing;
+    try {
+      pricing = await Pricing.findOne({ vehicleType: booking.vehicleType, isActive: true }).sort({ updatedAt: -1 });
+      
+      if (!pricing) {
+        return res.status(404).json({ message: `No pricing found for vehicle type: ${booking.vehicleType}` });
+      }
+    } catch (error) {
+      console.error('Error finding pricing for driver:', error);
+      return res.status(500).json({ message: `Database error: ${error.message}` });
     }
 
     // Calculate fare breakdown
@@ -389,8 +402,14 @@ async function estimateFareForDriver(req, res) {
     const estimatedFare = (fareBreakdown.base + fareBreakdown.distanceCost + fareBreakdown.timeCost + fareBreakdown.waitingCost) * fareBreakdown.surgeMultiplier;
 
     // Calculate driver earnings (after commission)
-    const { Commission } = require('../models/commission');
-    const commission = await Commission.findOne({ isActive: true }).sort({ createdAt: -1 });
+    let commission;
+    try {
+      commission = await Commission.findOne({ isActive: true }).sort({ createdAt: -1 });
+    } catch (error) {
+      console.error('Error finding commission:', error);
+      // Use default commission rate if database error
+      commission = null;
+    }
     const commissionRate = commission ? commission.percentage : 15; // Default 15%
     
     const grossFare = estimatedFare;
@@ -536,9 +555,15 @@ async function discoverAndEstimate(req, res) {
     drivers.sort((a, b) => a.distanceKm - b.distanceKm);
 
     // Fare estimation
-    const pricing = await Pricing.findOne({ vehicleType: vehicleType || 'mini', isActive: true }).sort({ updatedAt: -1 });
-    if (!pricing) {
-      return res.status(404).json({ message: `No pricing found for vehicle type: ${vehicleType || 'mini'}` });
+    let pricing;
+    try {
+      pricing = await Pricing.findOne({ vehicleType: vehicleType || 'mini', isActive: true }).sort({ updatedAt: -1 });
+      if (!pricing) {
+        return res.status(404).json({ message: `No pricing found for vehicle type: ${vehicleType || 'mini'}` });
+      }
+    } catch (error) {
+      console.error('Error finding pricing in discoverAndEstimate:', error);
+      return res.status(500).json({ message: `Database error: ${error.message}` });
     }
 
     const distanceKmVal = geolib.getDistance(
