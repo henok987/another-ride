@@ -75,16 +75,18 @@ async function getDriverById(driverId, options = undefined) {
       const base = process.env.AUTH_BASE_URL.replace(/\/$/, '');
       template = `${base}/drivers/{id}`;
     }
-    if (!fetchFn || !template || !driverId) return null;
+    if (!fetchFn) { console.warn('[userDirectory.getDriverById] fetch not available'); return null; }
+    if (!template) { console.warn('[userDirectory.getDriverById] DRIVER_LOOKUP_URL_TEMPLATE or AUTH_BASE_URL not configured'); return null; }
+    if (!driverId) { console.warn('[userDirectory.getDriverById] missing driverId'); return null; }
     const url = buildUrlFromTemplate(template, { id: driverId });
     const headers = { 'Accept': 'application/json' };
     const authHeader = options && options.headers && options.headers.Authorization ? options.headers.Authorization : undefined;
     if (authHeader) headers['Authorization'] = authHeader;
     else if (process.env.AUTH_SERVICE_BEARER) headers['Authorization'] = `Bearer ${process.env.AUTH_SERVICE_BEARER}`;
     const res = await fetchFn(url, { headers });
-    if (!res.ok) return null;
+    if (!res.ok) { console.warn(`[userDirectory.getDriverById] non-OK status ${res.status} for ${url}`); return null; }
     const data = await safeJson(res);
-    if (!data) return null;
+    if (!data) { console.warn('[userDirectory.getDriverById] empty response body'); return null; }
     const candidate = data.data || data.user || data.driver || data.account || data;
     const name = candidate.name || candidate.fullName || candidate.fullname || (candidate.profile && candidate.profile.name) || undefined;
     const phone = candidate.phone || candidate.phoneNumber || candidate.mobile || candidate.msisdn || (candidate.contact && candidate.contact.phone) || (candidate.profile && candidate.profile.phone) || undefined;
@@ -108,18 +110,28 @@ module.exports.getDriverById = getDriverById;
 
 async function getDriversByIds(ids = [], options = undefined) {
   try {
+    if (!fetchFn || !Array.isArray(ids) || ids.length === 0) return [];
     const base = process.env.AUTH_BASE_URL;
-    if (!fetchFn || !base || !Array.isArray(ids) || ids.length === 0) return [];
+    if (!base) {
+      // No batch endpoint configured; fall back to per-id using the template-based API
+      const results = await Promise.all((ids || []).map(id => getDriverById(id, options)));
+      return results.filter(Boolean);
+    }
     const url = `${base.replace(/\/$/, '')}/drivers/batch`;
     const headers = { 'Accept': 'application/json', 'Content-Type': 'application/json' };
     const authHeader = options && options.headers && options.headers.Authorization ? options.headers.Authorization : undefined;
     if (authHeader) headers['Authorization'] = authHeader;
     else if (process.env.AUTH_SERVICE_BEARER) headers['Authorization'] = `Bearer ${process.env.AUTH_SERVICE_BEARER}`;
     const res = await fetchFn(url, { method: 'POST', headers, body: JSON.stringify({ ids }) });
-    if (!res.ok) return [];
+    if (!res.ok) { console.warn(`[userDirectory.getDriversByIds] non-OK status ${res.status} for ${url}`); return []; }
     const data = await safeJson(res);
     const arr = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
-    return arr.map(u => ({ id: String(u.id || u._id || ''), name: u.name || u.fullName, phone: u.phone || u.msisdn }));
+    return arr.map(u => ({
+      id: String(u.id || u._id || ''),
+      name: u.name || u.fullName,
+      phone: u.phone || u.msisdn,
+      email: u.email || (u.profile && u.profile.email) || undefined
+    }));
   } catch (_) {
     // Fallback to per-id
     const results = await Promise.all((ids || []).map(id => getDriverById(id, options)));
@@ -161,7 +173,7 @@ async function listDrivers(query = {}, options = undefined) {
     if (!res.ok) return [];
     const data = await safeJson(res);
     const arr = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
-    return arr.map(u => ({ id: String(u.id || u._id || u.userId || ''), name: u.name || u.fullName, phone: u.phone || u.msisdn }));
+    return arr.map(u => ({ id: String(u.id || u._id || u.userId || ''), name: u.name || u.fullName, phone: u.phone || u.msisdn, email: u.email || (u.profile && u.profile.email) }));
   } catch (_) { return []; }
 }
 

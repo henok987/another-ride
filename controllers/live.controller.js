@@ -75,14 +75,23 @@ async function push(req, res) {
         email: req.user.email
       };
     } else if (userType === 'driver' && item.driverId) {
-      // Extract driver info from JWT token
-      userInfo = {
-        id: String(req.user.id),
-        name: req.user.name || req.user.fullName || req.user.displayName,
-        phone: req.user.phone || req.user.phoneNumber || req.user.mobile,
-        email: req.user.email,
-        vehicleType: req.user.vehicleType
-      };
+      // Fetch driver info from external service (no JWT fallback)
+      try {
+        const { getDriverById } = require('../services/userDirectory');
+        const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
+        const ext = await getDriverById(String(item.driverId), { headers: authHeader });
+        userInfo = ext ? {
+          id: String(item.driverId),
+          name: ext.name,
+          phone: ext.phone,
+          email: ext.email,
+          vehicleType: req.user.vehicleType
+        } : {
+          id: String(item.driverId), name: '', phone: '', email: '', vehicleType: req.user.vehicleType
+        };
+      } catch (_) {
+        userInfo = { id: String(item.driverId), name: '', phone: '', email: '', vehicleType: req.user.vehicleType };
+      }
     }
     
     const plain = {

@@ -209,7 +209,7 @@ exports.list = async (req, res) => {
       try {
         const { getDriversByIds } = require('../services/userDirectory');
         const infos = await getDriversByIds(driverIds, { headers: authHeader });
-        driverInfoMap = Object.fromEntries((infos || []).map(i => [String(i.id), { id: String(i.id), name: i.name, phone: i.phone }]));
+        driverInfoMap = Object.fromEntries((infos || []).map(i => [String(i.id), { id: String(i.id), name: i.name, phone: i.phone, email: i.email }]));
       } catch (_) {}
     }
 

@@ -90,13 +90,22 @@ async function setAvailability(req, res) {
     const d = await Driver.findByIdAndUpdate(driverId, { $set: { available: !!req.body.available } }, { new: true, upsert: true, setDefaultsOnInsert: true });
     if (!d) return res.status(404).json({ message: 'Not found' });
     
-    // Add driver basic information from JWT token
-    const driverInfo = {
-      id: String(req.user.id),
-      name: req.user.name || req.user.fullName || req.user.displayName,
-      phone: req.user.phone || req.user.phoneNumber || req.user.mobile,
-      email: req.user.email,
-      vehicleType: req.user.vehicleType
+    // Fetch driver information from external service (no JWT fallback)
+    const { getDriverById } = require('../services/userDirectory');
+    const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
+    const ext = await getDriverById(String(driverId), { headers: authHeader });
+    const driverInfo = ext ? {
+      id: String(driverId),
+      name: ext.name,
+      phone: ext.phone,
+      email: ext.email,
+      vehicleType: d.vehicleType
+    } : {
+      id: String(driverId),
+      name: '',
+      phone: '',
+      email: '',
+      vehicleType: d.vehicleType
     };
     
     const response = {
@@ -129,13 +138,22 @@ async function updateLocation(req, res) {
     const d = await Driver.findByIdAndUpdate(driverId, { $set: { lastKnownLocation: locationUpdate } }, { new: true, upsert: true, setDefaultsOnInsert: true });
     if (!d) return res.status(404).json({ message: 'Not found' });
     
-    // Add driver basic information from JWT token
-    const driverInfo = {
-      id: String(req.user.id),
-      name: req.user.name || req.user.fullName || req.user.displayName,
-      phone: req.user.phone || req.user.phoneNumber || req.user.mobile,
-      email: req.user.email,
-      vehicleType: req.user.vehicleType
+    // Fetch driver information from external service (no JWT fallback)
+    const { getDriverById: getDriverByIdA } = require('../services/userDirectory');
+    const authHeaderA = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
+    const extA = await getDriverByIdA(String(driverId), { headers: authHeaderA });
+    const driverInfo = extA ? {
+      id: String(driverId),
+      name: extA.name,
+      phone: extA.phone,
+      email: extA.email,
+      vehicleType: d.vehicleType
+    } : {
+      id: String(driverId),
+      name: '',
+      phone: '',
+      email: '',
+      vehicleType: d.vehicleType
     };
     
     const response = {
@@ -179,42 +197,26 @@ async function availableNearby(req, res) {
       };
 
       const lookupId = driver.externalId || driver._id;
-      let name = driver.name || undefined;
-      let phone = driver.phone || undefined;
-      let email = driver.email || undefined;
-      if (!name || !phone) {
-        try {
-          const ext = await getDriverById(String(lookupId), { headers: authHeader });
-          if (ext) {
-            name = name || ext.name;
-            phone = phone || ext.phone;
-            // persist enrichment for future requests
-            try {
-              const update = { };
-              if (ext.name && !driver.name) update.name = ext.name;
-              if (ext.phone && !driver.phone) update.phone = ext.phone;
-              if (driver.externalId == null && lookupId !== driver._id) update.externalId = String(lookupId);
-              if (Object.keys(update).length) await Driver.findByIdAndUpdate(driver._id, { $set: update });
-            } catch (_) {}
-          }
-          // If still missing, try listing by vehicleType or generic listing and match by id
-          if ((!name || !phone)) {
-            const list = await listDrivers({ vehicleType: driver.vehicleType }, { headers: authHeader });
-            const match = (list || []).find(u => String(u.id) === String(driver._id));
-            if (match) {
-              name = name || match.name;
-              phone = phone || match.phone;
-              // persist
-              try {
-                const update = { };
-                if (match.name && !driver.name) update.name = match.name;
-                if (match.phone && !driver.phone) update.phone = match.phone;
-                if (Object.keys(update).length) await Driver.findByIdAndUpdate(driver._id, { $set: update });
-              } catch (_) {}
-            }
-          }
-        } catch (_) {}
-      }
+      let name = undefined;
+      let phone = undefined;
+      let email = undefined;
+      try {
+        const ext = await getDriverById(String(lookupId), { headers: authHeader });
+        if (ext) {
+          name = ext.name;
+          phone = ext.phone;
+          email = ext.email;
+          // persist enrichment for future requests
+          try {
+            const update = { };
+            if (ext.name && !driver.name) update.name = ext.name;
+            if (ext.phone && !driver.phone) update.phone = ext.phone;
+            if (ext.email && !driver.email) update.email = ext.email;
+            if (driver.externalId == null && lookupId !== driver._id) update.externalId = String(lookupId);
+            if (Object.keys(update).length) await Driver.findByIdAndUpdate(driver._id, { $set: update });
+          } catch (_) {}
+        }
+      } catch (_) {}
 
       const driverInfo = {
         id: String(driver._id),
@@ -405,14 +407,14 @@ async function discoverAndEstimate(req, res) {
     const nearby = all.filter(d => d.lastKnownLocation && distanceKm(d.lastKnownLocation, { latitude: +pickup.latitude, longitude: +pickup.longitude }) <= +radiusKm);
 
     // Enrich driver data via templated external user directory to target the correct API
-    const { getDriverById: getDriverById2, listDrivers: listDrivers2, getDriversByIds: getDriversByIds2 } = require('../services/userDirectory');
+    const { getDriverById: getDriverById2, getDriversByIds: getDriversByIds2 } = require('../services/userDirectory');
     const authHeader2 = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
 
     // Try batch first for efficiency
     let idToExternal = {};
     try {
       const batch = await getDriversByIds2(nearby.map(d => String(d._id)), { headers: authHeader2 });
-      idToExternal = Object.fromEntries((batch || []).map(u => [String(u.id), { name: u.name, phone: u.phone }]));
+      idToExternal = Object.fromEntries((batch || []).map(u => [String(u.id), { name: u.name, phone: u.phone, email: u.email }]));
     } catch (_) {}
 
     const drivers = await Promise.all(nearby.map(async (driver) => {
@@ -426,38 +428,25 @@ async function discoverAndEstimate(req, res) {
       };
 
       const lookupId = driver.externalId || driver._id;
-      let name = idToExternal[String(lookupId)]?.name || driver.name || undefined;
-      let phone = idToExternal[String(lookupId)]?.phone || driver.phone || undefined;
-      let email = driver.email || undefined;
-      if (!name || !phone) {
+      let name = idToExternal[String(lookupId)]?.name || undefined;
+      let phone = idToExternal[String(lookupId)]?.phone || undefined;
+      let email = idToExternal[String(lookupId)]?.email || undefined;
+      if (!name || !phone || !email) {
         try {
           const ext = await getDriverById2(String(lookupId), { headers: authHeader2 });
           if (ext) {
             name = name || ext.name;
             phone = phone || ext.phone;
+            email = email || ext.email;
             // persist enrichment
             try {
               const update = { };
               if (ext.name && !driver.name) update.name = ext.name;
               if (ext.phone && !driver.phone) update.phone = ext.phone;
+              if (ext.email && !driver.email) update.email = ext.email;
               if (driver.externalId == null && lookupId !== driver._id) update.externalId = String(lookupId);
               if (Object.keys(update).length) await Driver.findByIdAndUpdate(driver._id, { $set: update });
             } catch (_) {}
-          }
-          if ((!name || !phone)) {
-            const list = await listDrivers2({ vehicleType: driver.vehicleType }, { headers: authHeader2 });
-            const match = (list || []).find(u => String(u.id) === String(driver._id));
-            if (match) {
-              name = name || match.name;
-              phone = phone || match.phone;
-              // persist
-              try {
-                const update = { };
-                if (match.name && !driver.name) update.name = match.name;
-                if (match.phone && !driver.phone) update.phone = match.phone;
-                if (Object.keys(update).length) await Driver.findByIdAndUpdate(driver._id, { $set: update });
-              } catch (_) {}
-            }
           }
         } catch (_) {}
       }
