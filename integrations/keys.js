@@ -42,5 +42,18 @@ if (!PUBLIC_KEY && process.env.PUBLIC_KEY_PATH) {
   try { PUBLIC_KEY = fs.readFileSync(path.resolve(process.env.PUBLIC_KEY_PATH), 'utf8'); } catch (_) {}
 }
 
+// Sanitize: trim and strip surrounding quotes if present
+const stripWrappingQuotes = (s) => {
+  if (!s) return s;
+  const trimmed = s.trim();
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+};
+
+PRIVATE_KEY = stripWrappingQuotes(PRIVATE_KEY).replace(/\r\n/g, '\n');
+PUBLIC_KEY = stripWrappingQuotes(PUBLIC_KEY).replace(/\r\n/g, '\n');
+
 module.exports = { PRIVATE_KEY, PUBLIC_KEY };
 

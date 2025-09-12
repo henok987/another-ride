@@ -11,7 +11,7 @@ function loadPrivateKeyPem() {
   if (!raw) return null;
   // Replace escaped newlines ("\n") with real newlines, and normalize CRLF
   let pem = raw.replace(/\\n/g, '\n').replace(/\r\n/g, '\n');
-  // If no PEM header, assume base64 payload and wrap
+  // If no PEM header, assume base64 payload and wrap as PKCS#8
   if (!/-----BEGIN [A-Z ]+PRIVATE KEY-----/.test(pem)) {
     // Remove spaces and newlines, then wrap
     const base64 = pem.replace(/\s+/g, '');
