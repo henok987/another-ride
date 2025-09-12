@@ -97,13 +97,19 @@ async function DirectPayment(arg1, amount, paymentReason, notifyUrl, phoneNumber
   const token = await generateSignedTokenForDirectPayment(params.Amount, params.PaymentReason, pm, params.PhoneNumber);
 
   const payload = {
+    // Provide both canonical and legacy aliases to satisfy varying API validators
     Id: params.Id,
+    ID: params.Id,
     Amount: params.Amount,
     PaymentReason: params.PaymentReason,
+    Reason: params.PaymentReason,
     MerchantId: GATEWAY_MERCHANT_ID,
+    MerchantID: GATEWAY_MERCHANT_ID,
     SignedToken: token,
     PhoneNumber: params.PhoneNumber,
+    Msisdn: params.PhoneNumber,
     NotifyUrl: params.NotifyUrl,
+    NotifyURL: params.NotifyUrl,
     PaymentMethod: pm
   };
   const url = `${BASE_URL}/direct-payment`;
