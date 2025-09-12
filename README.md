@@ -1,229 +1,356 @@
-# RideShare Backend API
+# External User Service v2.0.0
 
-[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-[![Node.js](https://img.shields.io/badge/node-%3E%3D14-brightgreen)](https://nodejs.org/)
-[![Express](https://img.shields.io/badge/express-4.x-lightgrey)](https://expressjs.com/)
+A refactored user service designed specifically for external service integration, particularly with booking services. This service provides role-based access control with data filtering based on the requester's role.
 
-## Table of Contents
+## 🚀 Key Features
 
-- [Project Overview](#project-overview)
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Getting Started](#getting-started)
-- [Environment Variables](#environment-variables)
-- [Database and Migrations](#database-and-migrations)
-- [API Endpoints](#api-endpoints)
-- [Folder Structure](#folder-structure)
-- [Development Notes](#development-notes)
-- [Contributing](#contributing)
-- [License](#license)
+- **Role-Based Data Exposure**: Different data access levels based on requester role
+- **External Service Integration**: Optimized for booking service integration
+- **Service Layer Architecture**: Clean separation of concerns with services, controllers, and routes
+- **Data Filtering**: Automatic field filtering based on role and user type
+- **Batch Operations**: Efficient batch retrieval for external services
+- **JWT Authentication**: Secure token-based authentication
+- **Service-to-Service Auth**: Support for external service authentication
 
----
+## 🏗️ Architecture
 
-## Project Overview
+### Folder Structure
+```
+/services
+  passenger.service.js    # Business logic for passengers
+  driver.service.js       # Business logic for drivers  
+  admin.service.js        # Business logic for admins
+/controllers
+  passenger.controller.js # HTTP request handlers for passengers
+  driver.controller.js    # HTTP request handlers for drivers
+  admin.controller.js    # HTTP request handlers for admins
+/routes
+  passenger.routes.js     # Passenger API endpoints
+  driver.routes.js        # Driver API endpoints
+  admin.routes.js         # Admin API endpoints
+/middleware
+  auth.js                 # JWT authentication middleware
+  rbac.js                 # Role-based access control middleware
+/utils
+  populate.js             # Role-based data filtering utility
+```
 
-This is the backend API for the RideShare application, built using Express.js and MySQL (via Sequelize). It handles user management (passengers, drivers, staff, admins), authentication, RBAC, driver document uploads, ratings, and admin operations.
+## 🔐 Role-Based Access Control
 
----
+### Access Matrix
 
-## Features
+| Requester Role | Passenger Data | Driver Data | Staff Data | Admin Data |
+|----------------|----------------|-------------|------------|------------|
+| **Passenger** | ✅ Own full data | ✅ Basic info (name, phone, car, rating) | ✅ Basic info | ✅ Basic info |
+| **Driver** | ✅ Basic info (name, phone, pickup location) | ✅ Own full data | ✅ Basic info | ✅ Basic info |
+| **Staff** | ✅ Most fields | ✅ Most fields | ✅ Own full data | ✅ Basic info |
+| **Admin** | ✅ All fields | ✅ All fields | ✅ All fields | ✅ All fields |
 
-- User registration and authentication (Passenger, Driver, Staff, Admin)
-- Role and permission-based access control (RBAC)
-- Passenger profile management, including self-delete
-- Driver document uploads and approval workflow (pending/approved/rejected)
-- Passenger and Driver rating flows
-- Driver Wallet model with association
-- Basic rate limiting on auth endpoints
+### Data Filtering Examples
 
----
+#### Passenger accessing Driver info:
+```json
+{
+  "id": "driver_id",
+  "externalId": "DRIV_ABC123", 
+  "name": "John Driver",
+  "phone": "+1234567890",
+  "vehicleType": "sedan",
+  "vehicleInfo": {
+    "plateNumber": "ABC123",
+    "model": "Toyota Camry"
+  },
+  "rating": 4.8,
+  "ratingCount": 150,
+  "isVerified": true,
+  "isActive": true
+}
+```
 
-## Tech Stack
+#### Driver accessing Passenger info:
+```json
+{
+  "id": "passenger_id",
+  "externalId": "PASS_XYZ789",
+  "name": "Jane Passenger", 
+  "phone": "+1234567890",
+  "profilePicture": "url",
+  "preferences": {
+    "language": "en",
+    "notifications": true
+  },
+  "isActive": true
+}
+```
 
-- Node.js
-- Express.js
-- MySQL / Sequelize ORM
-- JWT Authentication
-- Multer (file uploads)
-- Postman (collection provided)
+## 🔗 API Endpoints
 
----
+### External Service Integration Endpoints
 
-## Getting Started
+These endpoints are specifically designed for booking service integration:
+
+#### Get Passenger Info
+```http
+GET /api/passenger/:id
+Authorization: Bearer <jwt_token>
+# OR
+X-Service-Token: <service_token>
+X-Service-Name: booking-service
+```
+
+#### Get Driver Info  
+```http
+GET /api/driver/:id
+Authorization: Bearer <jwt_token>
+# OR
+X-Service-Token: <service_token>
+X-Service-Name: booking-service
+```
+
+#### Batch Get Passengers
+```http
+POST /api/passengers/batch
+Content-Type: application/json
+Authorization: Bearer <jwt_token>
+
+{
+  "ids": ["passenger_id_1", "passenger_id_2"]
+}
+```
+
+#### Batch Get Drivers
+```http
+POST /api/drivers/batch
+Content-Type: application/json
+Authorization: Bearer <jwt_token>
+
+{
+  "ids": ["driver_id_1", "driver_id_2"]
+}
+```
+
+### Admin Endpoints
+
+#### Get All Users
+```http
+GET /api/admin/users?userType=all&page=1&limit=20
+Authorization: Bearer <admin_token>
+```
+
+#### Get Specific User
+```http
+GET /api/admin/users/:userType/:id
+Authorization: Bearer <admin_token>
+```
+
+## 🛠️ Usage Examples
+
+### Booking Service Integration
+
+#### 1. Get Driver Info for Ride Booking
+```javascript
+// Booking service calls user service to get driver info
+const response = await fetch('http://user-service:3001/api/driver/DRIV_ABC123', {
+  headers: {
+    'X-Service-Token': 'booking-service-token',
+    'X-Service-Name': 'booking-service'
+  }
+});
+
+const driverData = await response.json();
+// Returns filtered driver data based on service role
+```
+
+#### 2. Get Passenger Info for Ride Completion
+```javascript
+// Driver app calls user service to get passenger info
+const response = await fetch('http://user-service:3001/api/passenger/PASS_XYZ789', {
+  headers: {
+    'Authorization': 'Bearer <driver_jwt_token>'
+  }
+});
+
+const passengerData = await response.json();
+// Returns filtered passenger data based on driver role
+```
+
+#### 3. Batch Get Users for Ride History
+```javascript
+// Get multiple users for ride history display
+const response = await fetch('http://user-service:3001/api/passengers/batch', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer <staff_jwt_token>'
+  },
+  body: JSON.stringify({
+    ids: ['passenger_1', 'passenger_2', 'passenger_3']
+  })
+});
+
+const passengersData = await response.json();
+// Returns array of filtered passenger data
+```
+
+## 🔧 Installation & Setup
 
 ### Prerequisites
+- Node.js >= 18
+- MongoDB >= 4.4
 
-- Node.js >= 14.x
-- MySQL
-- npm
+### Quick Start
 
-### Installation
+1. **Install Dependencies**
+   ```bash
+   npm install
+   ```
 
-```bash
-# Clone the repository
-git clone https://github.com/your-username/rideshare-backend.git
-cd rideshare-backend
+2. **Environment Setup**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your configuration
+   ```
 
-# Install dependencies
-npm install
-```
+3. **Start Service**
+   ```bash
+   # Development
+   npm run dev
+   
+   # Production  
+   npm start
+   ```
 
-### Configure Environment
-
-Create a `.env` file in the project root:
-
-```bash
-DB_NAME=rideshare_db
-DB_USER=root
-DB_PASS=your_password
-DB_HOST=127.0.0.1
-DB_PORT=3306
-JWT_SECRET=change_me
-# If you use the provided Postman baseUrl (4000), set PORT=4000
-PORT=4000
-# Enable Sequelize SQL logs (true/false)
-SEQ_LOG=false
-```
-
-### Start the Server
+### Environment Variables
 
 ```bash
-# Development (nodemon)
-npm run dev
+# Server Configuration
+PORT=3001
+NODE_ENV=development
 
-# or Production
-npm start
+# Database
+MONGODB_URI=mongodb://localhost:27017/user-service
+
+# Authentication
+JWT_SECRET=your-super-secret-jwt-key
+
+# External Service Tokens (comma-separated)
+SERVICE_TOKENS=booking-service-token,ride-service-token,payment-service-token
 ```
 
-The server starts at http://localhost:PORT (default 3000). All APIs are mounted under `/api`, e.g. `http://localhost:3000/api`.
+## 🧪 Testing the Service
 
----
-
-## Environment Variables
-
-- DB_NAME: Database name
-- DB_USER: Database username
-- DB_PASS: Database password
-- DB_HOST: Database host (default 127.0.0.1)
-- DB_PORT: Database port (default 3306)
-- JWT_SECRET: Secret for JWT signing
-- PORT: Server port (default 3000)
-- SEQ_LOG: Enable Sequelize logging (true/false)
-
----
-
-## Database and Migrations
-
-- On server start, `sequelize.sync({ alter: true })` will auto-create/update tables, including:
-  - `passengers.contract_id`
-  - `wallets` table and relations
-
-Optional manual scripts:
-
+### Health Check
 ```bash
-# Run migration helper
-npm run migrate
-# Seed roles/permissions/superadmin
-npm run seed
+curl http://localhost:3001/health
 ```
 
-Ensure MySQL is running and `.env` is configured before running migrations/seed.
+### Service Info
+```bash
+curl http://localhost:3001/api/info
+```
+
+### Test Role-Based Access
+
+#### As Passenger (get driver info):
+```bash
+curl -H "Authorization: Bearer <passenger_token>" \
+     http://localhost:3001/api/driver/DRIV_ABC123
+```
+
+#### As Driver (get passenger info):
+```bash
+curl -H "Authorization: Bearer <driver_token>" \
+     http://localhost:3001/api/passenger/PASS_XYZ789
+```
+
+#### As Admin (get all users):
+```bash
+curl -H "Authorization: Bearer <admin_token>" \
+     http://localhost:3001/api/admin/users
+```
+
+## 🔒 Security Features
+
+- **JWT Authentication**: Secure token-based authentication
+- **Role-Based Access Control**: Granular permission system
+- **Data Filtering**: Automatic field filtering based on role
+- **Service-to-Service Authentication**: Secure external service integration
+- **Input Validation**: Request validation and sanitization
+- **Rate Limiting**: Protection against abuse
+
+## 📊 Response Format
+
+All API responses follow a consistent format:
+
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Success",
+  "data": {
+    // Filtered user data based on requester role
+  },
+  "timestamp": "2024-01-01T00:00:00.000Z"
+}
+```
+
+## 🚨 Error Handling
+
+### Authentication Error
+```json
+{
+  "success": false,
+  "statusCode": 401,
+  "message": "Authentication required",
+  "error": "Please provide a valid authentication token",
+  "timestamp": "2024-01-01T00:00:00.000Z"
+}
+```
+
+### Authorization Error
+```json
+{
+  "success": false,
+  "statusCode": 403,
+  "message": "Access denied",
+  "error": "You cannot access driver data. Your role: passenger",
+  "timestamp": "2024-01-01T00:00:00.000Z"
+}
+```
+
+## 🔄 Migration from v1.0.0
+
+The service has been completely refactored for better external service integration:
+
+### Key Changes:
+- **New API Structure**: Simplified endpoints for external services
+- **Service Layer**: Business logic separated into service classes
+- **Enhanced RBAC**: More granular role-based access control
+- **Data Filtering**: Automatic field filtering based on role
+- **Batch Operations**: Efficient batch retrieval for external services
+
+### Breaking Changes:
+- API endpoints changed from `/api/v1/` to `/api/`
+- Response format updated with success/error structure
+- Authentication headers updated for external services
+
+## 📞 Support
+
+For technical support or questions about the External User Service:
+
+1. Check the health endpoint: `GET /health`
+2. Review service info: `GET /api/info`
+3. Check logs for detailed error information
+4. Contact the development team
+
+## 📚 Additional Resources
+
+- [API Documentation](./docs/API_DOCUMENTATION.md)
+- [Deployment Guide](./docs/DEPLOYMENT_GUIDE.md)
+- [Environment Configuration](./.env.example)
 
 ---
 
-## API Endpoints
-
-Base URL: `http://localhost:PORT/api`
-
-### Auth
-- POST `/auth/passenger/register`
-- POST `/auth/passenger/login`
-- POST `/auth/driver/register`
-- POST `/auth/driver/login`
-- POST `/auth/staff/login`
-- POST `/auth/admin/register`
-- POST `/auth/admin/login`
-
-### Passengers (admin)
-- GET `/passengers`
-- GET `/passengers/:id`
-- PUT `/passengers/:id`
-- DELETE `/passengers/:id`
-
-### Passengers (self)
-- GET `/passengers/profile/me`
-- PUT `/passengers/profile/me`
-- DELETE `/passengers/profile/me` (delete own account)
-- POST `/passengers/rate-driver/:driverId`
-
-### Drivers (admin)
-- GET `/drivers`
-- GET `/drivers/:id`
-- PUT `/drivers/:id`
-- DELETE `/drivers/:id`
-
-### Drivers (self)
-- GET `/drivers/profile/me`
-- PUT `/drivers/profile/me`
-- POST `/drivers/profile/me/toggle-availability`
-- POST `/drivers/:id/documents` (form-data uploads)
-- POST `/drivers/rate-passenger/:passengerId`
-
-### Admins
-- POST `/admins`
-- GET `/admins`
-- GET `/admins/:id`
-- PUT `/admins/:id`
-- DELETE `/admins/:id`
-- POST `/admins/drivers/:driverId/approve`
-- POST `/admins/drivers/:driverId/documents/approve`
-- POST `/admins/drivers/:driverId/documents/reject`
-- GET `/admins/drivers/pending-documents`
-- GET `/admins/users/filter?role=driver|passenger|staff|admin`
-- GET `/admins/staff?role=dispatcher`
-
-### Roles
-- POST `/roles`
-- GET `/roles`
-- GET `/roles/:id`
-- PUT `/roles/:id`
-- DELETE `/roles/:id`
-
-### Permissions
-- POST `/permissions`
-- GET `/permissions`
-- GET `/permissions/:id`
-- PUT `/permissions/:id`
-- DELETE `/permissions/:id`
-
----
-
-## Folder Structure
-
-```
-.
-├── config/
-│   └── database.js
-├── controllers/
-├── middleware/
-├── models/
-├── postman/
-│   └── rideshare.postman_collection.json
-├── routes/
-├── seed/
-├── uploads/
-├── server.js
-├── package.json
-└── README.md
-```
-
-
-## Contributing
-
-Contributions are welcome. Please open an issue or submit a PR.
-
----
-
-## License
-
-MIT
+**Version**: 2.0.0  
+**Last Updated**: 2024-01-01  
+**Compatibility**: Node.js 18+, MongoDB 4.4+
