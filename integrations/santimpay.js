@@ -3,7 +3,7 @@ const fetch = require('node-fetch');
 require('dotenv').config();
 
 const BASE_URL = process.env.SANTIMPAY_BASE_URL || 'https://gateway.santimpay.com/api';
-const GATEWAY_MERCHANT_ID = process.env.GATEWAY_MERCHANT_ID || process.env.SANTIMPAY_MERCHANT_ID || 'MERCHANT_ID';
+const GATEWAY_MERCHANT_ID = process.env.GATEWAY_MERCHANT_ID ;
 
 function importPrivateKey(pem) {
   return crypto.createPrivateKey({ key: pem, format: 'pem' });
