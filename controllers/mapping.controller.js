@@ -1,4 +1,4 @@
-const { getRoute, getEta } = require('../services/routing');
+const { getRoute, getEta } = require('../utils/routing');
 const { Booking, Live } = require('../models/bookingModels');
 
 exports.route = async (req, res) => {
