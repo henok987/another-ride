@@ -63,7 +63,12 @@ exports.webhook = async (req, res) => {
       await Wallet.updateOne({ userId: tx.userId, role: tx.role }, { $inc: { balance: tx.amount } }, { upsert: true });
     }
 
-    return res.json({ ok: true });
+    const notifyUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+    const responseBody = { ok: true, status: normalizedStatus };
+    if (normalizedStatus === 'success') {
+      responseBody.notifyUrl = notifyUrl;
+    }
+    return res.json(responseBody);
   } catch (e) {
     return res.status(500).json({ message: e.message });
   }
