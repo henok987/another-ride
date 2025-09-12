@@ -271,6 +271,14 @@ exports.getDriverEarnings = async (req, res) => {
       }
     ]);
 
+    // Integrate wallet balance
+    let walletBalance = 0;
+    try {
+      const { Wallet } = require('../models/common');
+      const wallet = await Wallet.findOne({ userId: String(driverIdFilter), role: 'driver' }).lean();
+      walletBalance = wallet ? wallet.balance : 0;
+    } catch (_) {}
+
     res.json({
       summary: summary[0] || {
         totalRides: 0,
@@ -278,6 +286,7 @@ exports.getDriverEarnings = async (req, res) => {
         totalCommissionDeducted: 0,
         netEarnings: 0
       },
+      wallet: { balance: walletBalance },
       earnings
     });
   } catch (e) {
@@ -339,16 +348,31 @@ exports.getRideHistory = async (req, res) => {
     }
 
     const rides = await Booking.find(query)
-      .populate('driverId', 'name phone vehicleType')
-      .populate('passengerId', 'name phone')
       .sort({ createdAt: -1 })
       .limit(limit * 1)
-      .skip((page - 1) * limit);
+      .skip((page - 1) * limit)
+      .lean();
+
+    // enrich driver basic info via external service using externalId when present
+    const { getDriversByIds } = require('../integrations/userServiceClient');
+    const driverExternalIds = [...new Set(rides.map(r => r.driverId).filter(Boolean))].map(String);
+    let driverInfoMap = {};
+    if (driverExternalIds.length) {
+      try {
+        const infos = await getDriversByIds(driverExternalIds, req.headers.authorization);
+        driverInfoMap = Object.fromEntries(infos.map(i => [String(i.id), { id: String(i.id), name: i.name, phone: i.phone }]));
+      } catch (_) {}
+    }
 
     const total = await Booking.countDocuments(query);
 
+    const data = rides.map(r => ({
+      ...r,
+      driver: r.driverId ? driverInfoMap[String(r.driverId)] : undefined
+    }));
+
     res.json({
-      rides,
+      rides: data,
       pagination: {
         current: parseInt(page),
         pages: Math.ceil(total / limit),
@@ -385,12 +409,24 @@ exports.getTripHistoryByUserId = async (req, res) => {
       query.status = status;
     }
 
-    const trips = await Booking.find(query)
-      .populate('driverId', 'name phone vehicleType')
-      .populate('passengerId', 'name phone')
-      .sort({ createdAt: -1 });
+    const trips = await Booking.find(query).sort({ createdAt: -1 }).lean();
 
-    res.json({ trips });
+    const { getDriversByIds } = require('../integrations/userServiceClient');
+    const driverExternalIds = [...new Set(trips.map(r => r.driverId).filter(Boolean))].map(String);
+    let driverInfoMap = {};
+    if (driverExternalIds.length) {
+      try {
+        const infos = await getDriversByIds(driverExternalIds, req.headers.authorization);
+        driverInfoMap = Object.fromEntries(infos.map(i => [String(i.id), { id: String(i.id), name: i.name, phone: i.phone }]));
+      } catch (_) {}
+    }
+
+    const data = trips.map(t => ({
+      ...t,
+      driver: t.driverId ? driverInfoMap[String(t.driverId)] : undefined
+    }));
+
+    res.json({ trips: data });
   } catch (e) {
     res.status(500).json({ message: `Failed to get trip history: ${e.message}` });
   }
@@ -468,10 +504,27 @@ exports.getFinanceOverview = async (req, res) => {
       { $limit: 10 }
     ]);
 
+    // Wallet aggregates
+    let walletTotals = { totalDriverBalances: 0, totalPassengerBalances: 0 };
+    try {
+      const { Wallet } = require('../models/common');
+      const driverAgg = await Wallet.aggregate([
+        { $match: { role: 'driver' } },
+        { $group: { _id: null, total: { $sum: '$balance' } } }
+      ]);
+      const passengerAgg = await Wallet.aggregate([
+        { $match: { role: 'passenger' } },
+        { $group: { _id: null, total: { $sum: '$balance' } } }
+      ]);
+      walletTotals.totalDriverBalances = driverAgg[0]?.total || 0;
+      walletTotals.totalPassengerBalances = passengerAgg[0]?.total || 0;
+    } catch (_) {}
+
     res.json({
       totalRevenue: totalRevenue[0]?.total || 0,
       commissionEarned: commissionEarned[0]?.total || 0,
       pendingPayouts: pendingPayouts[0]?.total || 0,
+      wallet: walletTotals,
       topEarningDrivers: topDrivers,
       mostProfitableRoutes: profitableRoutes
     });

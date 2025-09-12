@@ -56,18 +56,34 @@ const base = {
   get: async (req, res) => {
     try {
       const driver = await Driver.findById(req.params.id)
-        .select('_id name phone email vehicleType available lastKnownLocation rating createdAt updatedAt')
+        .select('_id name phone email vehicleType available lastKnownLocation rating externalId createdAt updatedAt')
         .lean();
       
       if (!driver) {
         return res.status(404).json({ message: 'Driver not found' });
       }
-      
+      // Enrich from external service when needed using externalId
+      let name = driver.name;
+      let phone = driver.phone;
+      let email = driver.email;
+      const lookupExternalId = driver.externalId ? String(driver.externalId) : null;
+      if ((!name || !phone) && lookupExternalId) {
+        try {
+          const { getDriverById } = require('../integrations/userServiceClient');
+          const ext = await getDriverById(lookupExternalId, { headers: req.headers.authorization ? { Authorization: req.headers.authorization } : undefined });
+          if (ext) {
+            name = name || ext.name;
+            phone = phone || ext.phone;
+            email = email || ext.email;
+          }
+        } catch (_) {}
+      }
+
       const response = {
         id: String(driver._id),
-        name: driver.name,
-        phone: driver.phone,
-        email: driver.email,
+        name: name,
+        phone: phone,
+        email: email,
         vehicleType: driver.vehicleType,
         available: !!driver.available,
         lastKnownLocation: driver.lastKnownLocation || null,

@@ -50,7 +50,7 @@ async function push(req, res) {
     let normalizedStatus = status;
     if (status === 'ongoing') normalizedStatus = 'moving';
     if (status === 'completed') normalizedStatus = 'stopped';
-    if (!allowedStatuses.includes(String(normalizedStatus || ''))) normalizedStatus = 'moving';
+    // Do not force a default. Let validation run if the input is invalid.
 
     // Create position update payload
     const payload = { 
