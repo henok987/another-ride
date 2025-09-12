@@ -251,7 +251,12 @@ async function availableNearby(req, res) {
         } catch (_) {}
       }
 
-      // Only return drivers with real external data (require name and phone; email optional)
+      // Fallback to DB values if external did not return
+      if (!name) name = driver.name || name;
+      if (!phone) phone = driver.phone || phone;
+      if (!email) email = driver.email || email;
+
+      // Require at least name and phone from any source
       if (!name || !phone) {
         return null;
       }
