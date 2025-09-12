@@ -1,4 +1,8 @@
-const { Wallet, Transaction } = require('../models/common');
+// Robust import in case model exports change; fallback to mongoose registry
+const mongoose = require('mongoose');
+const commonModels = require('../models/common');
+const Wallet = commonModels.Wallet || (mongoose.models && mongoose.models.Wallet);
+const Transaction = commonModels.Transaction || (mongoose.models && mongoose.models.Transaction);
 const { DirectPayment, PayoutB2C } = require('../integrations/santimpay');
 
 exports.topup = async (req, res) => {
