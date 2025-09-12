@@ -50,6 +50,9 @@ exports.list = async (req, res) => {
 
     const data = rows.map(r => {
       const b = bidMap[String(r.bookingId)];
+      const driver = toBasicUser(didMap[String(r.driverId)]) || undefined;
+      const passenger = toBasicUser(pidMap[String(r.passengerId)]) || (b ? { id: String(r.passengerId), name: b.passengerName, phone: b.passengerPhone } : undefined);
+      const car = b && r.driverId ? { model: undefined, plate: undefined } : undefined;
       return {
         id: String(r._id),
         bookingId: String(r.bookingId),
@@ -57,16 +60,10 @@ exports.list = async (req, res) => {
         passengerId: r.passengerId && String(r.passengerId),
         status: r.status,
         dateOfTravel: r.dateOfTravel,
-        createdAt: r.createdAt,
-        updatedAt: r.updatedAt,
-        passenger: toBasicUser(pidMap[String(r.passengerId)]) || (b ? { id: String(r.passengerId), name: b.passengerName, phone: b.passengerPhone } : undefined),
-        driver: toBasicUser(didMap[String(r.driverId)]),
-        booking: b ? {
-          id: String(b._id),
-          vehicleType: b.vehicleType,
-          pickup: b.pickup,
-          dropoff: b.dropoff
-        } : undefined
+        driver,
+        passenger,
+        car,
+        booking: b ? { id: String(b._id), vehicleType: b.vehicleType, pickup: b.pickup, dropoff: b.dropoff } : undefined
       };
     });
 
@@ -103,16 +100,10 @@ exports.get = async (req, res) => {
       passengerId: r.passengerId && String(r.passengerId),
       status: r.status,
       dateOfTravel: r.dateOfTravel,
-      createdAt: r.createdAt,
-      updatedAt: r.updatedAt,
       passenger: p ? { id: String(r.passengerId), name: p.name, phone: p.phone } : (b ? { id: String(r.passengerId), name: b.passengerName, phone: b.passengerPhone } : undefined),
       driver: d ? { id: String(r.driverId), name: d.name, phone: d.phone } : undefined,
-      booking: b ? {
-        id: String(b._id),
-        vehicleType: b.vehicleType,
-        pickup: b.pickup,
-        dropoff: b.dropoff
-      } : undefined
+      car: d ? { model: undefined, plate: undefined } : undefined,
+      booking: b ? { id: String(b._id), vehicleType: b.vehicleType, pickup: b.pickup, dropoff: b.dropoff } : undefined
     };
 
     return res.json(data);
@@ -141,6 +132,10 @@ exports.create = async (req, res) => {
     if (!bookingId || !driverId || !passengerId) {
       return res.status(400).json({ message: 'bookingId, driverId, and passengerId are required' });
     }
+    const b = await Booking.findById(bookingId).lean();
+    if (!b) return res.status(400).json({ message: 'Invalid bookingId' });
+    if (String(b.passengerId) !== String(passengerId)) return res.status(400).json({ message: 'passengerId does not match booking' });
+    if (b.driverId && String(b.driverId) !== String(driverId)) return res.status(400).json({ message: 'driverId does not match booking' });
 
     const trip = new TripHistory({
       bookingId,
@@ -287,11 +282,9 @@ exports.create = async (req, res) => {
 
 exports.update = async (req, res) => {
   try {
-    const updated = await TripHistory.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true }
-    );
+    const allowed = {};
+    if (req.body.status) allowed.status = req.body.status;
+    const updated = await TripHistory.findByIdAndUpdate(req.params.id, allowed, { new: true });
     if (!updated) return res.status(404).json({ message: 'Trip not found' });
     return res.json({
       id: String(updated._id),

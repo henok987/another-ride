@@ -10,5 +10,8 @@ const PricingSchema = new mongoose.Schema({
   isActive: { type: Boolean, default: true }
 }, { timestamps: true });
 
+// Prevent duplicates for same vehicleType and active state
+PricingSchema.index({ vehicleType: 1, baseFare: 1, perKm: 1, perMinute: 1, waitingPerMinute: 1, surgeMultiplier: 1 }, { unique: true });
+
 module.exports = { Pricing: mongoose.model('Pricing', PricingSchema) };
 

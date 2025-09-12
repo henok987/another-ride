@@ -87,7 +87,14 @@ async function setAvailability(req, res) {
   try {
     const driverId = String((((req.user && req.user.id) !== undefined && (req.user && req.user.id) !== null) ? req.user.id : req.params.id) || '');
     if (!driverId) return res.status(400).json({ message: 'Invalid driver id' });
-    const d = await Driver.findByIdAndUpdate(driverId, { $set: { available: !!req.body.available } }, { new: true, upsert: true, setDefaultsOnInsert: true });
+    const d = await Driver.findById(driverId);
+    if (!d) return res.status(404).json({ message: 'Not found' });
+    // Prohibit availability toggle if not approved
+    if (d.status !== 'approved') {
+      return res.status(403).json({ message: 'Driver status is not approved. Cannot toggle availability.' });
+    }
+    d.available = !!req.body.available;
+    await d.save();
     if (!d) return res.status(404).json({ message: 'Not found' });
     // Persist externalId mapping from JWT if present
     try {
@@ -147,7 +154,14 @@ async function updateLocation(req, res) {
       locationUpdate.bearing = bearing;
     }
     
-    const d = await Driver.findByIdAndUpdate(driverId, { $set: { lastKnownLocation: locationUpdate } }, { new: true, upsert: true, setDefaultsOnInsert: true });
+    const d = await Driver.findById(driverId);
+    if (!d) return res.status(404).json({ message: 'Not found' });
+    // Require approved to update live location
+    if (d.status !== 'approved') {
+      return res.status(403).json({ message: 'Driver status is not approved. Cannot update location.' });
+    }
+    d.lastKnownLocation = locationUpdate;
+    await d.save();
     if (!d) return res.status(404).json({ message: 'Not found' });
     // Persist externalId mapping from JWT if present
     try {
