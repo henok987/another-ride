@@ -1,0 +1,126 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: user-service
+  labels:
+    app: user-service
+    version: v1.0.0
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: user-service
+  template:
+    metadata:
+      labels:
+        app: user-service
+        version: v1.0.0
+    spec:
+      containers:
+      - name: user-service
+        image: user-service:latest
+        ports:
+        - containerPort: 3001
+          name: http
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: PORT
+          value: "3001"
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: user-service-secrets
+              key: mongodb-uri
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: user-service-secrets
+              key: jwt-secret
+        - name: SERVICE_TOKENS
+          valueFrom:
+            secretKeyRef:
+              name: user-service-secrets
+              key: service-tokens
+        - name: RIDE_SERVICE_URL
+          value: "http://ride-service:4000"
+        - name: PAYMENT_SERVICE_URL
+          value: "http://payment-service:4001"
+        - name: NOTIFICATION_SERVICE_URL
+          value: "http://notification-service:4002"
+        - name: EXTERNAL_SERVICE_TIMEOUT
+          value: "5000"
+        - name: EXTERNAL_SERVICE_RETRY_ATTEMPTS
+          value: "3"
+        - name: LOG_DIR
+          value: "/app/logs"
+        - name: MAX_LOG_SIZE
+          value: "10485760"
+        - name: MAX_LOG_FILES
+          value: "5"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+      volumes:
+      - name: logs
+        emptyDir: {}
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: user-service
+  labels:
+    app: user-service
+spec:
+  selector:
+    app: user-service
+  ports:
+  - port: 80
+    targetPort: 3001
+    protocol: TCP
+    name: http
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: user-service-secrets
+  namespace: user-service
+type: Opaque
+data:
+  mongodb-uri: bW9uZ29kYjovL21vbmdvZGI6MjcwMTcvdXNlci1zZXJ2aWNl # mongodb://mongodb:27017/user-service
+  jwt-secret: eW91ci1zdXBlci1zZWNyZXQtanN0LWtleS1jaGFuZ2UtdGhpcy1pbi1wcm9kdWN0aW9u # your-super-secret-jwt-key-change-this-in-production
+  service-tokens: cmlkZS1zZXJ2aWNlLXRva2VuLTEyMyxwYXltZW50LXNlcnZpY2UtdG9rZW4tNDU2LG5vdGlmaWNhdGlvbi1zZXJ2aWNlLXRva2VuLTc4OQ== # ride-service-token-123,payment-service-token-456,notification-service-token-789
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: user-service
+  labels:
+    name: user-service
