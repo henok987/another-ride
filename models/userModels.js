@@ -33,6 +33,10 @@ const DriverSchema = new mongoose.Schema({
   password: { type: String },
   vehicleType: { type: String, enum: ['mini', 'sedan', 'van'], default: 'mini' },
   available: { type: Boolean, default: false },
+  // Status and verification
+  status: { type: String, enum: ['pending','approved','suspended','rejected'], default: 'pending', index: true },
+  verification: { type: Boolean, default: false },
+  documentStatus: { type: String, enum: ['pending','approved','rejected'], default: 'pending' },
   lastKnownLocation: { 
     latitude: Number, 
     longitude: Number,

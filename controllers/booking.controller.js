@@ -62,7 +62,7 @@ exports.create = async (req, res) => {
     
     if (!passengerName || !passengerPhone) {
       try {
-        const { getPassengerById } = require('../services/userDirectory');
+        const { getPassengerById } = require('../integrations/userServiceClient');
         const info = await getPassengerById(passengerId);
         if (info) {
           passengerName = passengerName || info.name;
@@ -162,7 +162,7 @@ exports.list = async (req, res) => {
       
       // Try external service first
       try {
-        const { getPassengerById } = require('../services/userDirectory');
+        const { getPassengerById } = require('../integrations/userServiceClient');
         const additionalPassengerPromises = nonObjectIdPassengerIds.map(async (id) => {
           try {
             const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
@@ -207,9 +207,9 @@ exports.list = async (req, res) => {
     let driverInfoMap = {};
     if (driverIds.length) {
       try {
-        const { getDriversByIds } = require('../services/userDirectory');
+        const { getDriversByIds } = require('../integrations/userServiceClient');
         const infos = await getDriversByIds(driverIds, { headers: authHeader });
-        driverInfoMap = Object.fromEntries((infos || []).map(i => [String(i.id), { id: String(i.id), name: i.name, phone: i.phone }]));
+        driverInfoMap = Object.fromEntries((infos || []).map(i => [String(i.id), { id: String(i.id), name: i.name, phone: i.phone, email: i.email }]));
       } catch (_) {}
     }
 
@@ -370,6 +370,9 @@ exports.lifecycle = async (req, res) => {
       if (!driver || !driver.available) {
         return res.status(400).json({ message: 'Driver must be available to accept bookings. Driver is currently unavailable.' });
       }
+      if (driver.status !== 'approved') {
+        return res.status(403).json({ message: 'Driver is not approved to accept bookings.' });
+      }
       
       // Check if driver already has an active booking
       const activeBooking = await Booking.findOne({ 
@@ -385,6 +388,11 @@ exports.lifecycle = async (req, res) => {
       await Driver.findByIdAndUpdate(req.user.id, { available: false });
     }
     
+    // Restrict admin from altering lifecycle
+    if (['admin','staff','superadmin'].includes(String(req.user?.type || '').toLowerCase()) && status !== 'canceled') {
+      return res.status(403).json({ message: 'Admins cannot change booking lifecycle except cancel.' });
+    }
+
     // Check if another driver is trying to change status of accepted booking
     if (req.user?.type === 'driver' && booking.driverId && booking.driverId !== String(req.user.id)) {
       return res.status(403).json({ message: 'Only the assigned driver can change this booking status' });
@@ -481,11 +489,14 @@ exports.assign = async (req, res) => {
       return res.status(400).json({ message: `Cannot assign booking with status '${booking.status}'. Only 'requested' bookings can be assigned.` });
     }
     
-    // Check if driver is available
+    // Check if driver is available and approved
     const { Driver } = require('../models/userModels');
     const driver = await Driver.findById(driverId);
     if (!driver || !driver.available) {
       return res.status(400).json({ message: 'Driver is not available for assignment. Driver must be available to accept bookings.' });
+    }
+    if (driver.status !== 'approved') {
+      return res.status(403).json({ message: 'Driver is not approved for assignment.' });
     }
     
     // Check if driver already has an active booking
@@ -513,8 +524,32 @@ exports.assign = async (req, res) => {
     // Make driver unavailable
     await Driver.findByIdAndUpdate(driverId, { available: false });
     
-    broadcast('booking:assigned', { bookingId, driverId });
-    return res.json({ booking, assignment });
+    // Populate assignment response with user and booking info
+    try {
+      const { getDriverById, getPassengerById } = require('../integrations/userServiceClient');
+      const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
+      const [driverInfo, passengerInfo] = await Promise.all([
+        getDriverById(String(booking.driverId || driverId), { headers: authHeader }),
+        getPassengerById(String(booking.passengerId), { headers: authHeader })
+      ]);
+      const dispatcherName = req.user && (req.user.fullName || req.user.name || req.user.displayName);
+      const carInfo = { model: driver.carModel || '', plate: driver.carPlate || '' };
+      const enriched = {
+        booking: {
+          id: String(booking._id),
+          pickup: booking.pickup,
+          dropoff: booking.dropoff,
+          passenger: passengerInfo ? { id: booking.passengerId, name: passengerInfo.name, phone: passengerInfo.phone } : undefined
+        },
+        driver: driverInfo ? { id: String(driverId), name: driverInfo.name, phone: driverInfo.phone, car: carInfo } : { id: String(driverId), car: carInfo },
+        dispatcher: { id: String(dispatcherId), name: dispatcherName }
+      };
+      broadcast('booking:assigned', { bookingId, driverId });
+      return res.json(enriched);
+    } catch (_) {
+      broadcast('booking:assigned', { bookingId, driverId });
+      return res.json({ booking, assignment });
+    }
   } catch (e) { return res.status(500).json({ message: `Failed to assign booking: ${e.message}` }); }
 }
 

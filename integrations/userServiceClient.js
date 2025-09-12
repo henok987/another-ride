@@ -1,340 +1,210 @@
-// bookingController.js (Booking Service)
-const dayjs = require('dayjs');
-const geolib = require('geolib');
-const { Booking, BookingAssignment, TripHistory } = require('../models/bookingModels');
-const { Pricing } = require('../models/pricing');
-const { broadcast } = require('../sockets');
-const positionUpdateService = require('../services/positionUpdate');
-const {
-  getPassengerDetails,
-  getDriverDetails,
-  getDriversByIds,
-} = require('../integrations/userServiceClient');
+const axios = require('axios');
 
-// --- Fare Estimation ---
-async function estimateFare({ vehicleType = 'mini', pickup, dropoff }) {
-  const distanceKm =
-    geolib.getDistance(
-      { latitude: pickup.latitude, longitude: pickup.longitude },
-      { latitude: dropoff.latitude, longitude: dropoff.longitude }
-    ) / 1000;
-
-  const p =
-    (await Pricing.findOne({ vehicleType, isActive: true }).sort({ updatedAt: -1 })) || {
-      baseFare: 2,
-      perKm: 1,
-      perMinute: 0.2,
-      waitingPerMinute: 0.1,
-      surgeMultiplier: 1,
-    };
-
-  const fareBreakdown = {
-    base: p.baseFare,
-    distanceCost: distanceKm * p.perKm,
-    timeCost: 0,
-    waitingCost: 0,
-    surgeMultiplier: p.surgeMultiplier,
-  };
-
-  const fareEstimated =
-    (fareBreakdown.base +
-      fareBreakdown.distanceCost +
-      fareBreakdown.timeCost +
-      fareBreakdown.waitingCost) *
-    fareBreakdown.surgeMultiplier;
-
-  return { distanceKm, fareEstimated, fareBreakdown };
+function buildUrlFromTemplate(template, params) {
+  if (!template) return null;
+  return Object.keys(params || {}).reduce((acc, key) => acc.replace(new RegExp(`{${key}}`, 'g'), encodeURIComponent(String(params[key]))), template);
 }
 
-// --- Create Booking ---
-exports.create = async (req, res) => {
+async function safeJson(res) { return res && res.data ? res.data : null; }
+
+function extractUserCandidate(data) {
+  return data?.data || data?.user || data?.account || data?.driver || data?.passenger || data || {};
+}
+
+function pickCommonName(candidate) {
+  return candidate.name || candidate.fullName || candidate.fullname || candidate.displayName || candidate.profile?.name;
+}
+
+function pickCommonPhone(candidate) {
+  return candidate.phone || candidate.phoneNumber || candidate.mobile || candidate.msisdn || candidate.contact?.phone || candidate.profile?.phone;
+}
+
+function pickCommonEmail(candidate) {
+  return candidate.email || candidate.contact?.email || candidate.profile?.email;
+}
+
+function authHeadersFromOptions(options) {
+  const headers = { 'Accept': 'application/json' };
+  const authHeader = options && options.headers && options.headers.Authorization ? options.headers.Authorization : undefined;
+  if (authHeader) headers['Authorization'] = authHeader;
+  else if (process.env.AUTH_SERVICE_BEARER) headers['Authorization'] = `Bearer ${process.env.AUTH_SERVICE_BEARER}`;
+  return headers;
+}
+
+async function getPassengerById(passengerId, options = undefined) {
   try {
-    const passengerId = String(req.user?.id);
-    if (!passengerId)
-      return res.status(400).json({ message: 'Invalid passenger ID: user not authenticated' });
+    const template = process.env.PASSENGER_LOOKUP_URL_TEMPLATE;
+    if (!template || !passengerId) return null;
+    const url = buildUrlFromTemplate(template, { id: passengerId });
+    const headers = authHeadersFromOptions(options);
+    const res = await axios.get(url, { headers }).catch(() => null);
+    if (!res) return null;
+    const data = await safeJson(res);
+    const c = extractUserCandidate(data);
+    return { id: String(passengerId), name: pickCommonName(c), phone: pickCommonPhone(c), email: pickCommonEmail(c) };
+  } catch (_) { return null; }
+}
 
-    const { vehicleType, pickup, dropoff } = req.body;
-    if (!pickup || !dropoff)
-      return res.status(400).json({ message: 'Pickup and dropoff locations are required' });
-
-    const est = await estimateFare({ vehicleType, pickup, dropoff });
-
-    const booking = await Booking.create({
-      passengerId,
-      vehicleType,
-      pickup,
-      dropoff,
-      distanceKm: est.distanceKm,
-      fareEstimated: est.fareEstimated,
-      fareBreakdown: est.fareBreakdown,
-      status: 'requested',
-    });
-
-    const token = req.headers.authorization;
-    const passengerResult = await getPassengerDetails(passengerId, token);
-
-    const responseData = {
-      id: String(booking._id),
-      booking,
-      passenger: passengerResult.success
-        ? passengerResult.user
-        : { id: passengerId, error: passengerResult.message },
-    };
-
-    return res.status(201).json(responseData);
-  } catch (e) {
-    return res.status(500).json({ message: `Failed to create booking: ${e.message}` });
-  }
-};
-
-// --- List Bookings ---
-exports.list = async (req, res) => {
+async function getDriverById(driverId, options = undefined) {
   try {
-    const userType = req.user?.type;
-    const userId = req.user?.id;
-    let query = {};
-
-    if (userType === 'passenger') {
-      query.passengerId = String(userId);
+    let template = process.env.DRIVER_LOOKUP_URL_TEMPLATE;
+    if (!template && process.env.AUTH_BASE_URL) {
+      const base = process.env.AUTH_BASE_URL.replace(/\/$/, '');
+      template = `${base}/drivers/{id}`;
     }
+    if (!template || !driverId) return null;
+    const url = buildUrlFromTemplate(template, { id: driverId });
+    const headers = authHeadersFromOptions(options);
+    const res = await axios.get(url, { headers }).catch(() => null);
+    if (!res) return null;
+    const data = await safeJson(res);
+    const c = extractUserCandidate(data);
+    return { id: String(driverId), name: pickCommonName(c), phone: pickCommonPhone(c), email: pickCommonEmail(c) };
+  } catch (_) { return null; }
+}
 
-    const rows = await Booking.find(query).sort({ createdAt: -1 }).lean();
-
-    const passengerIds = [...new Set(rows.map((r) => r.passengerId))];
-    const driverIds = [...new Set(rows.map((r) => r.driverId).filter(Boolean))];
-
-    const token = req.headers.authorization;
-
-    // Fetch passengers from User Service
-    const passengerPromises = passengerIds.map((id) => getPassengerDetails(id, token));
-    const passengerResults = await Promise.all(passengerPromises);
-    const passengerMap = {};
-    passengerResults.forEach((res, i) => {
-      passengerMap[passengerIds[i]] = res.success
-        ? res.user
-        : { id: passengerIds[i], error: res.message };
-    });
-
-    // Fetch drivers from User Service
-    let driverMap = {};
-    if (driverIds.length) {
-      try {
-        const infos = await getDriversByIds(driverIds, token);
-        driverMap = Object.fromEntries(
-          infos.map((d) => [String(d.id), { id: d.id, name: d.name, phone: d.phone }])
-        );
-      } catch (_) {}
+async function getDriversByIds(ids = [], options = undefined) {
+  try {
+    if (!Array.isArray(ids) || ids.length === 0) return [];
+    const base = process.env.AUTH_BASE_URL;
+    if (!base) {
+      const results = await Promise.all((ids || []).map(id => getDriverById(id, options)));
+      return results.filter(Boolean);
     }
-
-    const normalized = rows.map((b) => ({
-      id: String(b._id),
-      passengerId: b.passengerId,
-      passenger: passengerMap[b.passengerId],
-      driverId: b.driverId,
-      driver: driverMap[b.driverId],
-      vehicleType: b.vehicleType,
-      pickup: b.pickup,
-      dropoff: b.dropoff,
-      distanceKm: b.distanceKm,
-      fareEstimated: b.fareEstimated,
-      fareFinal: b.fareFinal,
-      fareBreakdown: b.fareBreakdown,
-      status: b.status,
-      createdAt: b.createdAt,
-      updatedAt: b.updatedAt,
+    const url = `${base.replace(/\/$/, '')}/drivers/batch`;
+    const headers = authHeadersFromOptions(options);
+    headers['Content-Type'] = 'application/json';
+    const res = await axios.post(url, { ids }, { headers }).catch(() => null);
+    if (!res) {
+      const results = await Promise.all((ids || []).map(id => getDriverById(id, options)));
+      return results.filter(Boolean);
+    }
+    const data = await safeJson(res);
+    const arr = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+    return arr.map(u => ({
+      id: String(u.id || u._id || ''),
+      name: u.name || u.fullName,
+      phone: u.phone || u.msisdn,
+      email: u.email || u.profile?.email
     }));
-
-    return res.json(normalized);
-  } catch (e) {
-    return res.status(500).json({ message: `Failed to retrieve bookings: ${e.message}` });
+  } catch (_) {
+    const results = await Promise.all((ids || []).map(id => getDriverById(id, options)));
+    return results.filter(Boolean);
   }
-};
+}
 
-// --- Get Booking by ID ---
-exports.get = async (req, res) => {
+async function listPassengers(query = {}, options = undefined) {
   try {
-    const userType = req.user?.type;
-    let query = { _id: req.params.id };
-    if (userType === 'passenger') query.passengerId = String(req.user?.id);
+    const base = process.env.AUTH_BASE_URL;
+    if (!base) return [];
+    const url = new URL(`${base.replace(/\/$/, '')}/passengers`);
+    Object.entries(query).forEach(([k, v]) => { if (v != null) url.searchParams.set(k, v); });
+    const headers = authHeadersFromOptions(options);
+    const res = await axios.get(url.toString(), { headers }).catch(() => null);
+    if (!res) return [];
+    const data = await safeJson(res);
+    const arr = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+    return arr.map(u => ({ id: String(u.id || u._id || u.userId || ''), name: u.name || u.fullName, phone: u.phone || u.msisdn, email: u.email || u.profile?.email }));
+  } catch (_) { return []; }
+}
 
-    const item = await Booking.findOne(query).lean();
-    if (!item)
-      return res.status(404).json({ message: 'Booking not found or you do not have permission to access it' });
-
-    const token = req.headers.authorization;
-    const passengerResult = await getPassengerDetails(item.passengerId, token);
-    const driverResult = item.driverId ? await getDriverDetails(item.driverId, token) : null;
-
-    return res.json({
-      id: String(item._id),
-      ...item,
-      passenger: passengerResult.success
-        ? passengerResult.user
-        : { id: item.passengerId, error: passengerResult.message },
-      driver: driverResult
-        ? driverResult.success
-          ? driverResult.user
-          : { id: item.driverId, error: driverResult.message }
-        : null,
-    });
-  } catch (e) {
-    return res.status(500).json({ message: `Failed to retrieve booking: ${e.message}` });
-  }
-};
-
-// --- Update Booking ---
-exports.update = async (req, res) => {
+async function listDrivers(query = {}, options = undefined) {
   try {
-    const updated = await Booking.findOneAndUpdate(
-      { _id: req.params.id, passengerId: String(req.user?.id) },
-      req.body,
-      { new: true }
-    );
-    if (!updated)
-      return res.status(404).json({ message: 'Booking not found or you do not have permission to update it' });
+    const base = process.env.AUTH_BASE_URL;
+    if (!base) return [];
+    const url = new URL(`${base.replace(/\/$/, '')}/drivers`);
+    Object.entries(query).forEach(([k, v]) => { if (v != null) url.searchParams.set(k, v); });
+    const headers = authHeadersFromOptions(options);
+    const res = await axios.get(url.toString(), { headers }).catch(() => null);
+    if (!res) return [];
+    const data = await safeJson(res);
+    const arr = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+    return arr.map(u => ({ id: String(u.id || u._id || u.userId || ''), name: u.name || u.fullName, phone: u.phone || u.msisdn, email: u.email || u.profile?.email }));
+  } catch (_) { return []; }
+}
 
-    return res.json(updated);
-  } catch (e) {
-    return res.status(500).json({ message: `Failed to update booking: ${e.message}` });
-  }
-};
-
-// --- Remove Booking ---
-exports.remove = async (req, res) => {
+async function getStaffById(staffId, options = undefined) {
   try {
-    const r = await Booking.findOneAndDelete({ _id: req.params.id, passengerId: String(req.user?.id) });
-    if (!r)
-      return res.status(404).json({ message: 'Booking not found or you do not have permission to delete it' });
+    const base = process.env.AUTH_BASE_URL;
+    if (!base || !staffId) return null;
+    const url = `${base.replace(/\/$/, '')}/staff/${encodeURIComponent(String(staffId))}`;
+    const headers = authHeadersFromOptions(options);
+    const res = await axios.get(url, { headers }).catch(() => null);
+    if (!res) return null;
+    const data = await safeJson(res);
+    const u = extractUserCandidate(data);
+    return { id: String(u.id || u._id || staffId), name: pickCommonName(u), phone: pickCommonPhone(u), email: pickCommonEmail(u) };
+  } catch (_) { return null; }
+}
 
-    return res.status(204).send();
-  } catch (e) {
-    return res.status(500).json({ message: `Failed to delete booking: ${e.message}` });
-  }
-};
-
-// --- Booking Lifecycle ---
-exports.lifecycle = async (req, res) => {
+async function listStaff(query = {}, options = undefined) {
   try {
-    const { status } = req.body;
-    const booking = await Booking.findById(req.params.id);
-    if (!booking) return res.status(404).json({ message: 'Booking not found' });
+    const base = process.env.AUTH_BASE_URL;
+    if (!base) return [];
+    const url = new URL(`${base.replace(/\/$/, '')}/staff`);
+    Object.entries(query).forEach(([k, v]) => { if (v != null) url.searchParams.set(k, v); });
+    const headers = authHeadersFromOptions(options);
+    const res = await axios.get(url.toString(), { headers }).catch(() => null);
+    if (!res) return [];
+    const data = await safeJson(res);
+    const arr = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+    return arr.map(u => ({ id: String(u.id || u._id || ''), name: u.name || u.fullName, phone: u.phone || u.msisdn, email: u.email || u.profile?.email }));
+  } catch (_) { return []; }
+}
 
-    if (!['requested', 'accepted', 'ongoing', 'completed', 'canceled'].includes(status))
-      return res.status(400).json({ message: `Invalid status '${status}'.` });
-
-    if (booking.status === 'completed')
-      return res.status(400).json({ message: 'Cannot change status of completed bookings' });
-
-    if (status === 'accepted' && req.user?.type === 'driver') booking.driverId = String(req.user.id);
-
-    booking.status = status;
-    if (status === 'completed') booking.fareFinal = booking.fareEstimated;
-
-    await booking.save();
-    await TripHistory.create({
-      bookingId: booking._id,
-      driverId: booking.driverId,
-      passengerId: booking.passengerId,
-      status: booking.status,
-    });
-
-    broadcast('booking:update', { id: booking._id, status });
-    return res.json(booking);
-  } catch (e) {
-    return res.status(500).json({ message: `Failed to update booking lifecycle: ${e.message}` });
-  }
-};
-
-// --- Assign Driver ---
-exports.assign = async (req, res) => {
+async function getAdminById(adminId, options = undefined) {
   try {
-    const { driverId, dispatcherId } = req.body;
-    const bookingId = req.params.id;
-    if (!driverId || !dispatcherId)
-      return res.status(400).json({ message: 'Driver and dispatcher IDs required' });
+    const base = process.env.AUTH_BASE_URL;
+    if (!base || !adminId) return null;
+    const url = `${base.replace(/\/$/, '')}/admins/${encodeURIComponent(String(adminId))}`;
+    const headers = authHeadersFromOptions(options);
+    const res = await axios.get(url, { headers }).catch(() => null);
+    if (!res) return null;
+    const data = await safeJson(res);
+    const u = extractUserCandidate(data);
+    return { id: String(u.id || u._id || adminId), name: pickCommonName(u), phone: pickCommonPhone(u), email: pickCommonEmail(u) };
+  } catch (_) { return null; }
+}
 
-    const booking = await Booking.findById(bookingId);
-    if (!booking) return res.status(404).json({ message: 'Booking not found' });
-    if (booking.status !== 'requested')
-      return res.status(400).json({ message: `Cannot assign booking with status '${booking.status}'` });
-
-    const assignment = await BookingAssignment.create({
-      bookingId,
-      driverId: String(driverId),
-      dispatcherId: String(dispatcherId),
-      passengerId: booking.passengerId,
-    });
-
-    booking.driverId = String(driverId);
-    booking.status = 'accepted';
-    await booking.save();
-
-    broadcast('booking:assigned', { bookingId, driverId });
-    return res.json({ booking, assignment });
-  } catch (e) {
-    return res.status(500).json({ message: `Failed to assign booking: ${e.message}` });
-  }
-};
-
-// --- Fare Estimation Endpoint ---
-exports.estimate = async (req, res) => {
+async function listAdmins(query = {}, options = undefined) {
   try {
-    const { vehicleType, pickup, dropoff } = req.body;
-    if (!pickup || !dropoff)
-      return res.status(400).json({ message: 'Pickup and dropoff locations are required for fare estimation' });
+    const base = process.env.AUTH_BASE_URL;
+    if (!base) return [];
+    const url = new URL(`${base.replace(/\/$/, '')}/admins`);
+    Object.entries(query).forEach(([k, v]) => { if (v != null) url.searchParams.set(k, v); });
+    const headers = authHeadersFromOptions(options);
+    const res = await axios.get(url.toString(), { headers }).catch(() => null);
+    if (!res) return [];
+    const data = await safeJson(res);
+    const arr = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+    return arr.map(u => ({ id: String(u.id || u._id || ''), name: u.name || u.fullName, phone: u.phone || u.msisdn, email: u.email || u.profile?.email }));
+  } catch (_) { return []; }
+}
 
-    const est = await estimateFare({ vehicleType, pickup, dropoff });
-    return res.json(est);
-  } catch (e) {
-    return res.status(500).json({ message: `Failed to estimate fare: ${e.message}` });
-  }
+// Compatibility wrappers used in some controllers
+async function getPassengerDetails(id, token) {
+  const headers = token ? { Authorization: token } : undefined;
+  const u = await getPassengerById(id, { headers });
+  return u ? { success: true, user: u } : { success: false, message: 'Not found' };
+}
+
+async function getDriverDetails(id, token) {
+  const headers = token ? { Authorization: token } : undefined;
+  const u = await getDriverById(id, { headers });
+  return u ? { success: true, user: u } : { success: false, message: 'Not found' };
+}
+
+module.exports = {
+  getPassengerById,
+  getDriverById,
+  getDriversByIds,
+  listPassengers,
+  listDrivers,
+  getStaffById,
+  listStaff,
+  getAdminById,
+  listAdmins,
+  getPassengerDetails,
+  getDriverDetails
 };
 
-// --- Rating Endpoints ---
-exports.ratePassenger = async (req, res) => {
-  try {
-    const { rating, comment } = req.body;
-    const bookingId = req.params.id;
-    const driverId = req.user.id;
-
-    if (!rating || rating < 1 || rating > 5) return res.status(400).json({ message: 'Rating must be between 1 and 5' });
-
-    const booking = await Booking.findById(bookingId);
-    if (!booking) return res.status(404).json({ message: 'Booking not found' });
-
-    if (booking.driverId !== driverId) return res.status(403).json({ message: 'Only the assigned driver can rate the passenger' });
-    if (booking.status !== 'completed') return res.status(400).json({ message: 'Can only rate after completion' });
-
-    booking.passengerRating = rating;
-    if (comment) booking.passengerComment = comment;
-    await booking.save();
-
-    return res.json({ message: 'Passenger rated successfully', booking });
-  } catch (e) {
-    return res.status(500).json({ message: `Failed to rate passenger: ${e.message}` });
-  }
-};
-
-exports.rateDriver = async (req, res) => {
-  try {
-    const { rating, comment } = req.body;
-    const bookingId = req.params.id;
-    const passengerId = req.user.id;
-
-    if (!rating || rating < 1 || rating > 5) return res.status(400).json({ message: 'Rating must be between 1 and 5' });
-
-    const booking = await Booking.findById(bookingId);
-    if (!booking) return res.status(404).json({ message: 'Booking not found' });
-
-    if (String(booking.passengerId) !== String(passengerId)) return res.status(403).json({ message: 'Only the passenger can rate the driver' });
-    if (booking.status !== 'completed') return res.status(400).json({ message: 'Can only rate after completion' });
-
-    booking.driverRating = rating;
-    if (comment) booking.driverComment = comment;
-    await booking.save();
-
-    return res.json({ message: 'Driver rated successfully' });
-  } catch (e) {
-    return res.status(500).json({ message: `Failed to rate driver: ${e.message}` });
-  }
-};

@@ -1,5 +1,5 @@
 const { TripHistory, Booking } = require('../models/bookingModels');
-const { Passenger, Driver } = require('../models/userModels');
+const { getPassengerById, getDriverById } = require('../integrations/userServiceClient');
 
 function toBasicUser(u) {
   if (!u) return undefined;
@@ -31,18 +31,28 @@ exports.list = async (req, res) => {
     const driverIds = [...new Set(rows.map(r => r.driverId).filter(Boolean))];
     const bookingIds = rows.map(r => r.bookingId).filter(Boolean);
 
-    const [passengers, drivers, bookings] = await Promise.all([
-      Passenger.find({ _id: { $in: passengerIds } }).select({ _id: 1, name: 1, phone: 1, email: 1 }).lean(),
-      Driver.find({ _id: { $in: driverIds } }).select({ _id: 1, name: 1, phone: 1, email: 1, vehicleType: 1 }).lean(),
+    const [bookings] = await Promise.all([
       Booking.find({ _id: { $in: bookingIds } }).select({ _id: 1, pickup: 1, dropoff: 1, vehicleType: 1, passengerName: 1, passengerPhone: 1 }).lean()
     ]);
-
-    const pidMap = Object.fromEntries(passengers.map(p => [String(p._id), p]));
-    const didMap = Object.fromEntries(drivers.map(d => [String(d._id), d]));
+    // Fetch from external user service in parallel
+    const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
+    const passengerLookups = await Promise.all(passengerIds.map(async (id) => {
+      const info = await getPassengerById(id, { headers: authHeader }).catch(() => null);
+      return info ? [String(id), { id: String(id), name: info.name, phone: info.phone }] : null;
+    }));
+    const driverLookups = await Promise.all(driverIds.map(async (id) => {
+      const info = await getDriverById(id, { headers: authHeader }).catch(() => null);
+      return info ? [String(id), { id: String(id), name: info.name, phone: info.phone }] : null;
+    }));
+    const pidMap = Object.fromEntries(passengerLookups.filter(Boolean));
+    const didMap = Object.fromEntries(driverLookups.filter(Boolean));
     const bidMap = Object.fromEntries(bookings.map(b => [String(b._id), b]));
 
     const data = rows.map(r => {
       const b = bidMap[String(r.bookingId)];
+      const driver = toBasicUser(didMap[String(r.driverId)]) || undefined;
+      const passenger = toBasicUser(pidMap[String(r.passengerId)]) || (b ? { id: String(r.passengerId), name: b.passengerName, phone: b.passengerPhone } : undefined);
+      const car = b && r.driverId ? { model: undefined, plate: undefined } : undefined;
       return {
         id: String(r._id),
         bookingId: String(r.bookingId),
@@ -50,16 +60,10 @@ exports.list = async (req, res) => {
         passengerId: r.passengerId && String(r.passengerId),
         status: r.status,
         dateOfTravel: r.dateOfTravel,
-        createdAt: r.createdAt,
-        updatedAt: r.updatedAt,
-        passenger: toBasicUser(pidMap[String(r.passengerId)]) || (b ? { id: String(r.passengerId), name: b.passengerName, phone: b.passengerPhone } : undefined),
-        driver: toBasicUser(didMap[String(r.driverId)]),
-        booking: b ? {
-          id: String(b._id),
-          vehicleType: b.vehicleType,
-          pickup: b.pickup,
-          dropoff: b.dropoff
-        } : undefined
+        driver,
+        passenger,
+        car,
+        booking: b ? { id: String(b._id), vehicleType: b.vehicleType, pickup: b.pickup, dropoff: b.dropoff } : undefined
       };
     });
 
@@ -82,9 +86,10 @@ exports.get = async (req, res) => {
     const r = await TripHistory.findById(req.params.id).lean();
     if (!r) return res.status(404).json({ message: 'Trip not found' });
 
+    const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
     const [p, d, b] = await Promise.all([
-      r.passengerId ? Passenger.findById(r.passengerId).select({ _id: 1, name: 1, phone: 1, email: 1 }).lean() : null,
-      r.driverId ? Driver.findById(r.driverId).select({ _id: 1, name: 1, phone: 1, email: 1, vehicleType: 1 }).lean() : null,
+      r.passengerId ? getPassengerById(r.passengerId, { headers: authHeader }).catch(() => null) : null,
+      r.driverId ? getDriverById(r.driverId, { headers: authHeader }).catch(() => null) : null,
       r.bookingId ? Booking.findById(r.bookingId).select({ _id: 1, pickup: 1, dropoff: 1, vehicleType: 1, passengerName: 1, passengerPhone: 1 }).lean() : null
     ]);
 
@@ -95,16 +100,10 @@ exports.get = async (req, res) => {
       passengerId: r.passengerId && String(r.passengerId),
       status: r.status,
       dateOfTravel: r.dateOfTravel,
-      createdAt: r.createdAt,
-      updatedAt: r.updatedAt,
-      passenger: toBasicUser(p) || (b ? { id: String(r.passengerId), name: b.passengerName, phone: b.passengerPhone } : undefined),
-      driver: toBasicUser(d),
-      booking: b ? {
-        id: String(b._id),
-        vehicleType: b.vehicleType,
-        pickup: b.pickup,
-        dropoff: b.dropoff
-      } : undefined
+      passenger: p ? { id: String(r.passengerId), name: p.name, phone: p.phone } : (b ? { id: String(r.passengerId), name: b.passengerName, phone: b.passengerPhone } : undefined),
+      driver: d ? { id: String(r.driverId), name: d.name, phone: d.phone } : undefined,
+      car: d ? { model: undefined, plate: undefined } : undefined,
+      booking: b ? { id: String(b._id), vehicleType: b.vehicleType, pickup: b.pickup, dropoff: b.dropoff } : undefined
     };
 
     return res.json(data);
@@ -133,6 +132,10 @@ exports.create = async (req, res) => {
     if (!bookingId || !driverId || !passengerId) {
       return res.status(400).json({ message: 'bookingId, driverId, and passengerId are required' });
     }
+    const b = await Booking.findById(bookingId).lean();
+    if (!b) return res.status(400).json({ message: 'Invalid bookingId' });
+    if (String(b.passengerId) !== String(passengerId)) return res.status(400).json({ message: 'passengerId does not match booking' });
+    if (b.driverId && String(b.driverId) !== String(driverId)) return res.status(400).json({ message: 'driverId does not match booking' });
 
     const trip = new TripHistory({
       bookingId,
@@ -249,4 +252,62 @@ exports.remove = async (req, res) => {
   }
 };
 
+
+// Minimal CRUD handlers for trips (primarily for admin/staff tools)
+exports.create = async (req, res) => {
+  try {
+    const { bookingId, driverId, passengerId, status, dateOfTravel } = req.body || {};
+    if (!bookingId) return res.status(400).json({ message: 'bookingId is required' });
+    const created = await TripHistory.create({
+      bookingId,
+      driverId: driverId && String(driverId),
+      passengerId: passengerId && String(passengerId),
+      status: status || 'requested',
+      dateOfTravel: dateOfTravel ? new Date(dateOfTravel) : new Date()
+    });
+    return res.status(201).json({
+      id: String(created._id),
+      bookingId: String(created.bookingId),
+      driverId: created.driverId && String(created.driverId),
+      passengerId: created.passengerId && String(created.passengerId),
+      status: created.status,
+      dateOfTravel: created.dateOfTravel,
+      createdAt: created.createdAt,
+      updatedAt: created.updatedAt
+    });
+  } catch (e) {
+    return res.status(500).json({ message: `Failed to create trip: ${e.message}` });
+  }
+};
+
+exports.update = async (req, res) => {
+  try {
+    const allowed = {};
+    if (req.body.status) allowed.status = req.body.status;
+    const updated = await TripHistory.findByIdAndUpdate(req.params.id, allowed, { new: true });
+    if (!updated) return res.status(404).json({ message: 'Trip not found' });
+    return res.json({
+      id: String(updated._id),
+      bookingId: String(updated.bookingId),
+      driverId: updated.driverId && String(updated.driverId),
+      passengerId: updated.passengerId && String(updated.passengerId),
+      status: updated.status,
+      dateOfTravel: updated.dateOfTravel,
+      createdAt: updated.createdAt,
+      updatedAt: updated.updatedAt
+    });
+  } catch (e) {
+    return res.status(500).json({ message: `Failed to update trip: ${e.message}` });
+  }
+};
+
+exports.remove = async (req, res) => {
+  try {
+    const r = await TripHistory.findByIdAndDelete(req.params.id);
+    if (!r) return res.status(404).json({ message: 'Trip not found' });
+    return res.status(204).send();
+  } catch (e) {
+    return res.status(500).json({ message: `Failed to delete trip: ${e.message}` });
+  }
+};
 

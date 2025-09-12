@@ -26,20 +26,7 @@ async function enrichEntity(entity) {
     } catch (_) {}
   }
 
-  // Try to enrich driver info
-  if (clone.driverId && !clone.driver) {
-    try {
-      const d = await Driver.findById(clone.driverId).select({ _id: 1, name: 1 }).lean();
-      if (d) clone.driver = { id: String(d._id), name: d.name };
-    } catch (_) {}
-  }
-  if (clone.driver && !clone.driver.name && (clone.driver.id || clone.driver._id)) {
-    try {
-      const did = clone.driver.id || clone.driver._id;
-      const d = await Driver.findById(did).select({ _id: 1, name: 1 }).lean();
-      if (d) clone.driver = { id: String(d._id), name: d.name };
-    } catch (_) {}
-  }
+  // Skip driver enrichment here to avoid overriding external service data
 
   return clone;
 }

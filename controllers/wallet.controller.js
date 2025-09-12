@@ -1,9 +1,13 @@
-const { Wallet, Transaction } = require('../models/common');
+// Robust import in case model exports change; fallback to mongoose registry
+const mongoose = require('mongoose');
+const commonModels = require('../models/common');
+const Wallet = commonModels.Wallet || (mongoose.models && mongoose.models.Wallet);
+const Transaction = commonModels.Transaction || (mongoose.models && mongoose.models.Transaction);
 const { DirectPayment, PayoutB2C } = require('../integrations/santimpay');
 
 exports.topup = async (req, res) => {
   try {
-    const { amount, paymentMethod = 'santimpay', phoneNumber, reason = 'Wallet Topup' } = req.body || {};
+    const { amount, paymentMethod = 'telebirr', phoneNumber, reason = 'Wallet Topup' } = req.body || {};
     if (!amount || amount <= 0) return res.status(400).json({ message: 'amount must be > 0' });
     if (!phoneNumber) return res.status(400).json({ message: 'phoneNumber is required' });
 
@@ -26,7 +30,14 @@ exports.topup = async (req, res) => {
     });
 
     const notifyUrl = process.env.SANTIMPAY_NOTIFY_URL || `${process.env.BASE_URL || 'https://example.com'}/v1/wallet/webhook`;
-    const response = await DirectPayment(String(tx._id), amount, reason, notifyUrl, phoneNumber, paymentMethod);
+    const response = await DirectPayment({
+      Id: String(tx._id),
+      Amount: amount,
+      PaymentReason: reason,
+      PhoneNumber: phoneNumber,
+      PaymentMethod: paymentMethod,
+      NotifyUrl: notifyUrl
+    });
 
     // Store gateway response minimal data
     await Transaction.findByIdAndUpdate(tx._id, { metadata: { ...tx.metadata, gatewayResponse: response } });
