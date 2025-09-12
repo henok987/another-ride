@@ -440,7 +440,7 @@ async function discoverAndEstimate(req, res) {
     const nearby = all.filter(d => d.lastKnownLocation && distanceKm(d.lastKnownLocation, { latitude: +pickup.latitude, longitude: +pickup.longitude }) <= +radiusKm);
 
     // Enrich driver data via templated external user directory to target the correct API
-    const { getDriverById: getDriverById2, getDriversByIds: getDriversByIds2 } = require('../services/userDirectory');
+    const { getDriverById: getDriverById2, getDriversByIds: getDriversByIds2 } = require('../integrations/userServiceClient');
     const authHeader2 = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
 
     // Try batch first for efficiency
