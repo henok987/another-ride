@@ -1,9 +1,31 @@
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const axios = require('axios');
 require('dotenv').config();
 
 const BASE_URL = process.env.SANTIMPAY_BASE_URL || 'https://gateway.santimpay.com/api';
 const GATEWAY_MERCHANT_ID = process.env.GATEWAY_MERCHANT_ID || process.env.SANTIMPAY_MERCHANT_ID || 'MERCHANT_ID';
+
+function loadPrivateKeyPem() {
+  let raw = process.env.PRIVATE_KEY_IN_PEM || process.env.SANTIMPAY_PRIVATE_KEY || '';
+  const keyPath = process.env.SANTIMPAY_PRIVATE_KEY_PATH;
+  // If path provided, prefer file contents
+  if (!raw && keyPath) {
+    try { raw = fs.readFileSync(path.resolve(keyPath), 'utf8'); } catch (_) {}
+  }
+  if (!raw) return null;
+  // Replace escaped newlines ("\n") with real newlines, and normalize CRLF
+  let pem = raw.replace(/\\n/g, '\n').replace(/\r\n/g, '\n');
+  // If no PEM header, assume base64 payload and wrap
+  if (!/-----BEGIN [A-Z ]+PRIVATE KEY-----/.test(pem)) {
+    // Remove spaces and newlines, then wrap
+    const base64 = pem.replace(/\s+/g, '');
+    const wrapped = base64.match(/.{1,64}/g)?.join('\n') || base64;
+    pem = `-----BEGIN PRIVATE KEY-----\n${wrapped}\n-----END PRIVATE KEY-----\n`;
+  }
+  return pem;
+}
 
 function importPrivateKey(pem) {
   return crypto.createPrivateKey({ key: pem, format: 'pem' });
@@ -31,7 +53,17 @@ async function generateSignedTokenForDirectPayment(amount, paymentReason, paymen
     merchantId: GATEWAY_MERCHANT_ID,
     generated: time
   };
-  const token = signES256(payload, process.env.PRIVATE_KEY_IN_PEM);
+  const pem = loadPrivateKeyPem();
+  if (!pem) {
+    throw new Error('SantimPay signing key not configured. Provide PRIVATE_KEY_IN_PEM or SANTIMPAY_PRIVATE_KEY or SANTIMPAY_PRIVATE_KEY_PATH');
+  }
+  let token;
+  try {
+    token = signES256(payload, pem);
+  } catch (e) {
+    // Surface clearer error for PEM decode problems
+    throw new Error(`Failed to sign ES256 token: ${e.message}. Ensure the private key is a valid EC P-256 key in PEM format.`);
+  }
   return token;
 }
 
