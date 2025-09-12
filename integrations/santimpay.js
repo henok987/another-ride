@@ -1,19 +1,13 @@
 const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
 const axios = require('axios');
+const { PRIVATE_KEY } = require('./keys');
 require('dotenv').config();
 
 const BASE_URL = process.env.SANTIMPAY_BASE_URL || 'https://gateway.santimpay.com/api';
 const GATEWAY_MERCHANT_ID = process.env.GATEWAY_MERCHANT_ID || process.env.SANTIMPAY_MERCHANT_ID || 'MERCHANT_ID';
 
 function loadPrivateKeyPem() {
-  let raw = process.env.PRIVATE_KEY_IN_PEM || process.env.SANTIMPAY_PRIVATE_KEY || '';
-  const keyPath = process.env.SANTIMPAY_PRIVATE_KEY_PATH;
-  // If path provided, prefer file contents
-  if (!raw && keyPath) {
-    try { raw = fs.readFileSync(path.resolve(keyPath), 'utf8'); } catch (_) {}
-  }
+  let raw = PRIVATE_KEY || process.env.PRIVATE_KEY_IN_PEM || process.env.SANTIMPAY_PRIVATE_KEY || '';
   if (!raw) return null;
   // Replace escaped newlines ("\n") with real newlines, and normalize CRLF
   let pem = raw.replace(/\\n/g, '\n').replace(/\r\n/g, '\n');
