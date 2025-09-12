@@ -3,7 +3,7 @@ const axios = require('axios');
 const { PRIVATE_KEY } = require('./keys');
 require('dotenv').config();
 
-const BASE_URL = process.env.SANTIMPAY_BASE_URL || 'https://gateway.santimpay.com/api';
+const BASE_URL = process.env.SANTIMPAY_BASE_URL || 'https://services.santimpay.com/api/v1/gateway';
 const GATEWAY_MERCHANT_ID = process.env.GATEWAY_MERCHANT_ID || process.env.SANTIMPAY_MERCHANT_ID || 'MERCHANT_ID';
 
 function loadPrivateKeyPem() {
@@ -61,19 +61,51 @@ async function generateSignedTokenForDirectPayment(amount, paymentReason, paymen
   return token;
 }
 
-async function DirectPayment(id, amount, paymentReason, notifyUrl, phoneNumber, paymentMethod) {
-  const token = await generateSignedTokenForDirectPayment(amount, paymentReason, paymentMethod, phoneNumber);
+async function DirectPayment(arg1, amount, paymentReason, notifyUrl, phoneNumber, paymentMethod) {
+  let params;
+  if (typeof arg1 === 'object' && arg1 !== null) {
+    params = {
+      Id: arg1.Id || arg1.ID,
+      Amount: arg1.Amount,
+      PaymentReason: arg1.PaymentReason || arg1.Reason,
+      PhoneNumber: arg1.PhoneNumber,
+      PaymentMethod: arg1.PaymentMethod,
+      NotifyUrl: arg1.NotifyUrl || arg1.NotifyURL
+    };
+  } else {
+    params = {
+      Id: arg1,
+      Amount: amount,
+      PaymentReason: paymentReason,
+      PhoneNumber: phoneNumber,
+      PaymentMethod: paymentMethod,
+      NotifyUrl: notifyUrl
+    };
+  }
+
+  const missing = [];
+  if (!params.PhoneNumber) missing.push('PhoneNumber');
+  if (!params.Id) missing.push('Id');
+  if (!params.PaymentReason) missing.push('PaymentReason');
+  if (!params.NotifyUrl) missing.push('NotifyUrl');
+  if (missing.length) {
+    throw new Error(`Missing required fields: ${missing.join(', ')}`);
+  }
+
+  const pmRaw = (params.PaymentMethod || 'santimpay').toLowerCase();
+  const pm = normalizePaymentMethod(pmRaw) || pmRaw;
+  const token = await generateSignedTokenForDirectPayment(params.Amount, params.PaymentReason, pm, params.PhoneNumber);
+
   const payload = {
-    ID: id,
-    Amount: amount,
-    Reason: paymentReason,
-    MerchantID: GATEWAY_MERCHANT_ID,
+    Id: params.Id,
+    Amount: params.Amount,
+    PaymentReason: params.PaymentReason,
+    MerchantId: GATEWAY_MERCHANT_ID,
     SignedToken: token,
-    PhoneNumber: phoneNumber,
-    NotifyURL: notifyUrl
+    PhoneNumber: params.PhoneNumber,
+    NotifyUrl: params.NotifyUrl,
+    PaymentMethod: pm
   };
-  const pm = normalizePaymentMethod(paymentMethod);
-  if (pm) payload.PaymentMethod = pm;
   const url = `${BASE_URL}/direct-payment`;
   const headers = { 'Content-Type': 'application/json' };
   return await requestWithRetry('direct-payment', url, payload, headers);
