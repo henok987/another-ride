@@ -21,11 +21,6 @@ const TransactionSchema = new mongoose.Schema({
   msisdn: { type: String }
 }, { timestamps: true, toJSON: { versionKey: false }, toObject: { versionKey: false } });
 
-module.exports = {
-  Wallet: mongoose.models.Wallet || mongoose.model('Wallet', WalletSchema),
-  Transaction: mongoose.models.Transaction || mongoose.model('Transaction', TransactionSchema)
-};
-
 const LocationSchema = new mongoose.Schema({
   latitude: { type: Number, required: true },
   longitude: { type: Number, required: true },
@@ -34,5 +29,13 @@ const LocationSchema = new mongoose.Schema({
 
 const VehicleTypeEnum = ['mini', 'sedan', 'van'];
 
-module.exports = { LocationSchema, VehicleTypeEnum };
+const Wallet = mongoose.models.Wallet || mongoose.model('Wallet', WalletSchema);
+const Transaction = mongoose.models.Transaction || mongoose.model('Transaction', TransactionSchema);
+
+module.exports = {
+  Wallet,
+  Transaction,
+  LocationSchema,
+  VehicleTypeEnum
+};
 
