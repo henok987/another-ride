@@ -30,7 +30,7 @@ router.use('/admin', adminRoutes);
 // Get passenger info for external services
 router.get('/passenger/:id', 
   require('../middleware/rbac').validateExternalServiceAccess(),
-  require('../middleware/auth').authenticate,
+  require('../middleware/auth')(),
   require('../middleware/rbac').canAccessUserType('passenger'),
   require('../middleware/rbac').filterResponseData('passenger'),
   require('../controllers/passenger.controller').getPassengerById
@@ -39,7 +39,7 @@ router.get('/passenger/:id',
 // Get driver info for external services
 router.get('/driver/:id', 
   require('../middleware/rbac').validateExternalServiceAccess(),
-  require('../middleware/auth').authenticate,
+  require('../middleware/auth')(),
   require('../middleware/rbac').canAccessUserType('driver'),
   require('../middleware/rbac').filterResponseData('driver'),
   require('../controllers/driver.controller').getDriverById
@@ -48,7 +48,7 @@ router.get('/driver/:id',
 // Get user info by external ID for external services
 router.get('/passenger/external/:externalId', 
   require('../middleware/rbac').validateExternalServiceAccess(),
-  require('../middleware/auth').authenticate,
+  require('../middleware/auth')(),
   require('../middleware/rbac').canAccessUserType('passenger'),
   require('../middleware/rbac').filterResponseData('passenger'),
   require('../controllers/passenger.controller').getPassengerByExternalId
@@ -56,7 +56,7 @@ router.get('/passenger/external/:externalId',
 
 router.get('/driver/external/:externalId', 
   require('../middleware/rbac').validateExternalServiceAccess(),
-  require('../middleware/auth').authenticate,
+  require('../middleware/auth')(),
   require('../middleware/rbac').canAccessUserType('driver'),
   require('../middleware/rbac').filterResponseData('driver'),
   require('../controllers/driver.controller').getDriverByExternalId
@@ -65,7 +65,7 @@ router.get('/driver/external/:externalId',
 // Batch operations for external services
 router.post('/passengers/batch', 
   require('../middleware/rbac').validateExternalServiceAccess(),
-  require('../middleware/auth').authenticate,
+  require('../middleware/auth')(),
   require('../middleware/rbac').requireStaff(),
   require('../middleware/rbac').filterResponseData('passenger'),
   require('../controllers/passenger.controller').getPassengersByIds
@@ -73,7 +73,7 @@ router.post('/passengers/batch',
 
 router.post('/drivers/batch', 
   require('../middleware/rbac').validateExternalServiceAccess(),
-  require('../middleware/auth').authenticate,
+  require('../middleware/auth')(),
   require('../middleware/rbac').requireStaff(),
   require('../middleware/rbac').filterResponseData('driver'),
   require('../controllers/driver.controller').getDriversByIds

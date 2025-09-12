@@ -7,7 +7,7 @@ const express = require('express');
 const router = express.Router();
 
 const passengerController = require('../controllers/passenger.controller');
-const { authenticate } = require('../middleware/auth');
+const authenticate = require('../middleware/auth');
 const { 
   requirePassenger, 
   requireStaff, 
@@ -30,7 +30,7 @@ router.post('/auth', passengerController.authenticatePassenger);
 // Get passenger by ID (role-based access)
 router.get('/:id', 
   validateExternalServiceAccess(),
-  authenticate, 
+  authenticate(), 
   canAccessUserType('passenger'),
   filterResponseData('passenger'),
   passengerController.getPassengerById
@@ -39,7 +39,7 @@ router.get('/:id',
 // Get passenger by external ID (role-based access)
 router.get('/external/:externalId', 
   validateExternalServiceAccess(),
-  authenticate, 
+  authenticate(), 
   canAccessUserType('passenger'),
   filterResponseData('passenger'),
   passengerController.getPassengerByExternalId
@@ -49,7 +49,7 @@ router.get('/external/:externalId',
 
 // List passengers (staff/admin only)
 router.get('/', 
-  authenticate, 
+  authenticate(), 
   requireStaff(), 
   filterResponseData('passenger'),
   passengerController.listPassengers
@@ -57,21 +57,21 @@ router.get('/',
 
 // Update passenger (own data or admin)
 router.put('/:id', 
-  authenticate, 
+  authenticate(), 
   requirePassenger(), 
   passengerController.updatePassenger
 );
 
 // Delete passenger (staff/admin only)
 router.delete('/:id', 
-  authenticate, 
+  authenticate(), 
   requireStaff(), 
   passengerController.deletePassenger
 );
 
 // Batch get passengers by IDs (staff/admin only)
 router.post('/batch', 
-  authenticate, 
+  authenticate(), 
   requireStaff(), 
   filterResponseData('passenger'),
   passengerController.getPassengersByIds
@@ -79,7 +79,7 @@ router.post('/batch',
 
 // Get passenger statistics (staff/admin only)
 router.get('/stats/overview', 
-  authenticate, 
+  authenticate(), 
   requireStaff(), 
   passengerController.getPassengerStats
 );

@@ -7,7 +7,7 @@ const express = require('express');
 const router = express.Router();
 
 const adminController = require('../controllers/admin.controller');
-const { authenticate } = require('../middleware/auth');
+const authenticate = require('../middleware/auth');
 const { 
   requireAdmin,
   requireStaff,
@@ -19,7 +19,7 @@ const {
 
 // Create admin (admin only)
 router.post('/', 
-  authenticate, 
+  authenticate(), 
   requireAdmin(), 
   adminController.createAdmin
 );
@@ -29,7 +29,7 @@ router.post('/auth', adminController.authenticateAdmin);
 
 // Get admin by ID (admin only)
 router.get('/:id', 
-  authenticate, 
+  authenticate(), 
   requireAdmin(), 
   filterResponseData('admin'),
   adminController.getAdminById
@@ -39,28 +39,28 @@ router.get('/:id',
 
 // Get all users (admin only)
 router.get('/users', 
-  authenticate, 
+  authenticate(), 
   requireAdmin(), 
   adminController.getAllUsers
 );
 
 // Get specific user by ID and type (admin only)
 router.get('/users/:userType/:id', 
-  authenticate, 
+  authenticate(), 
   requireAdmin(), 
   adminController.getUserById
 );
 
 // Update specific user by ID and type (admin only)
 router.put('/users/:userType/:id', 
-  authenticate, 
+  authenticate(), 
   requireAdmin(), 
   adminController.updateUser
 );
 
 // Delete specific user by ID and type (admin only)
 router.delete('/users/:userType/:id', 
-  authenticate, 
+  authenticate(), 
   requireAdmin(), 
   adminController.deleteUser
 );
@@ -69,7 +69,7 @@ router.delete('/users/:userType/:id',
 
 // Get passengers (admin view)
 router.get('/passengers', 
-  authenticate, 
+  authenticate(), 
   requireAdmin(), 
   filterResponseData('passenger'),
   adminController.getPassengers
@@ -77,7 +77,7 @@ router.get('/passengers',
 
 // Get drivers (admin view)
 router.get('/drivers', 
-  authenticate, 
+  authenticate(), 
   requireAdmin(), 
   filterResponseData('driver'),
   adminController.getDrivers
@@ -85,7 +85,7 @@ router.get('/drivers',
 
 // Get staff (admin view)
 router.get('/staff', 
-  authenticate, 
+  authenticate(), 
   requireAdmin(), 
   filterResponseData('staff'),
   adminController.getStaff
@@ -93,7 +93,7 @@ router.get('/staff',
 
 // Get admins (admin view)
 router.get('/admins', 
-  authenticate, 
+  authenticate(), 
   requireAdmin(), 
   filterResponseData('admin'),
   adminController.getAdmins
@@ -103,14 +103,14 @@ router.get('/admins',
 
 // Get system statistics (admin only)
 router.get('/stats/system', 
-  authenticate, 
+  authenticate(), 
   requireAdmin(), 
   adminController.getSystemStats
 );
 
 // Get user activity logs (admin only)
 router.get('/logs/activity', 
-  authenticate, 
+  authenticate(), 
   requireAdmin(), 
   adminController.getUserActivityLogs
 );

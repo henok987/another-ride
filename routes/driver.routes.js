@@ -7,7 +7,7 @@ const express = require('express');
 const router = express.Router();
 
 const driverController = require('../controllers/driver.controller');
-const { authenticate } = require('../middleware/auth');
+const authenticate = require('../middleware/auth');
 const { 
   requireDriver, 
   requireStaff, 
@@ -29,7 +29,7 @@ router.post('/auth', driverController.authenticateDriver);
 // Get available drivers (for booking service)
 router.get('/available', 
   validateExternalServiceAccess(),
-  authenticate, 
+  authenticate(), 
   filterResponseData('driver'),
   driverController.getAvailableDrivers
 );
@@ -39,7 +39,7 @@ router.get('/available',
 // Get driver by ID (role-based access)
 router.get('/:id', 
   validateExternalServiceAccess(),
-  authenticate, 
+  authenticate(), 
   canAccessUserType('driver'),
   filterResponseData('driver'),
   driverController.getDriverById
@@ -48,7 +48,7 @@ router.get('/:id',
 // Get driver by external ID (role-based access)
 router.get('/external/:externalId', 
   validateExternalServiceAccess(),
-  authenticate, 
+  authenticate(), 
   canAccessUserType('driver'),
   filterResponseData('driver'),
   driverController.getDriverByExternalId
@@ -58,7 +58,7 @@ router.get('/external/:externalId',
 
 // List drivers (staff/admin only)
 router.get('/', 
-  authenticate, 
+  authenticate(), 
   requireStaff(), 
   filterResponseData('driver'),
   driverController.listDrivers
@@ -66,21 +66,21 @@ router.get('/',
 
 // Update driver (own data or admin)
 router.put('/:id', 
-  authenticate, 
+  authenticate(), 
   requireDriver(), 
   driverController.updateDriver
 );
 
 // Delete driver (staff/admin only)
 router.delete('/:id', 
-  authenticate, 
+  authenticate(), 
   requireStaff(), 
   driverController.deleteDriver
 );
 
 // Batch get drivers by IDs (staff/admin only)
 router.post('/batch', 
-  authenticate, 
+  authenticate(), 
   requireStaff(), 
   filterResponseData('driver'),
   driverController.getDriversByIds
@@ -88,14 +88,14 @@ router.post('/batch',
 
 // Update driver rating (passenger/staff/admin)
 router.put('/:id/rating', 
-  authenticate, 
+  authenticate(), 
   requirePassenger(), 
   driverController.updateDriverRating
 );
 
 // Get driver statistics (staff/admin only)
 router.get('/stats/overview', 
-  authenticate, 
+  authenticate(), 
   requireStaff(), 
   driverController.getDriverStats
 );
