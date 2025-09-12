@@ -7,6 +7,7 @@
   "item": [
     {
       "name": "Health",
+      "auth": { "type": "noauth" },
       "item": [
         {
           "name": "GET /v1/health",
@@ -29,6 +30,7 @@
     },
     {
       "name": "Auth",
+      "auth": { "type": "noauth" },
       "item": [
         {
           "name": "POST /v1/auth/passenger/register",
@@ -278,7 +280,7 @@
         { "name": "POST /v1/analytics/commission", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"rate\": 0.1\n}"}, "url": { "raw": "{{baseUrl}}/v1/analytics/commission", "host": ["{{baseUrl}}"], "path": ["v1","analytics","commission"] } } },
         { "name": "GET /v1/analytics/commission", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/analytics/commission", "host": ["{{baseUrl}}"], "path": ["v1","analytics","commission"] } } },
         { "name": "GET /v1/analytics/rides/history", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/analytics/rides/history", "host": ["{{baseUrl}}"], "path": ["v1","analytics","rides","history"] } } },
-        { "name": "GET /v1/analytics/trips/history/:userType/:userId", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/analytics/trips/history/{{userType}}/{{userId}}", "host": ["{{baseUrl}}"], "path": ["v1","analytics","trips","history","{{userType}}","{{userId}}"] } } },
+        { "name": "GET /v1/analytics/trips/history/:userType/:userId", "request": { "auth": { "type": "noauth" }, "method": "GET", "url": { "raw": "{{baseUrl}}/v1/analytics/trips/history/{{userType}}/{{userId}}", "host": ["{{baseUrl}}"], "path": ["v1","analytics","trips","history","{{userType}}","{{userId}}"] } } },
         { "name": "GET /v1/analytics/finance/overview", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/analytics/finance/overview", "host": ["{{baseUrl}}"], "path": ["v1","analytics","finance","overview"] } } },
         { "name": "GET /v1/analytics/rewards/passenger", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/analytics/rewards/passenger", "host": ["{{baseUrl}}"], "path": ["v1","analytics","rewards","passenger"] } } },
         { "name": "GET /v1/analytics/rewards/driver", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/analytics/rewards/driver", "host": ["{{baseUrl}}"], "path": ["v1","analytics","rewards","driver"] } } }
@@ -292,7 +294,7 @@
         { "name": "GET /v1/wallet/transactions", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/wallet/transactions", "host": ["{{baseUrl}}"], "path": ["v1","wallet","transactions"] } } },
         { "name": "GET /v1/wallet/transactions/:userId", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/wallet/transactions/{{userId}}", "host": ["{{baseUrl}}"], "path": ["v1","wallet","transactions","{{userId}}"] } } },
         { "name": "POST /v1/wallet/withdraw", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"amount\": 50\n}"}, "url": { "raw": "{{baseUrl}}/v1/wallet/withdraw", "host": ["{{baseUrl}}"], "path": ["v1","wallet","withdraw"] } } },
-        { "name": "POST /v1/wallet/webhook", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"event\": \"payment_success\"\n}"}, "url": { "raw": "{{baseUrl}}/v1/wallet/webhook", "host": ["{{baseUrl}}"], "path": ["v1","wallet","webhook"] } } }
+        { "name": "POST /v1/wallet/webhook", "request": { "auth": { "type": "noauth" }, "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"event\": \"payment_success\"\n}"}, "url": { "raw": "{{baseUrl}}/v1/wallet/webhook", "host": ["{{baseUrl}}"], "path": ["v1","wallet","webhook"] } } }
       ]
     }
   ],
