@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const fetch = require('node-fetch');
+const axios = require('axios');
 require('dotenv').config();
 
 const BASE_URL = process.env.SANTIMPAY_BASE_URL || 'https://gateway.santimpay.com/api';
@@ -48,13 +48,15 @@ async function DirectPayment(id, amount, paymentReason, notifyUrl, phoneNumber, 
     PaymentMethod: paymentMethod
   };
   const url = `${BASE_URL}/direct-payment`;
-  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`SantimPay direct-payment failed: ${res.status} ${t}`);
+  try {
+    const res = await axios.post(url, payload, { headers: { 'Content-Type': 'application/json' } });
+    return res.data;
+  } catch (e) {
+    const status = e.response?.status || 'ERR';
+    const data = e.response?.data;
+    const text = typeof data === 'string' ? data : JSON.stringify(data);
+    throw new Error(`SantimPay direct-payment failed: ${status} ${text}`);
   }
-  const body = await res.json();
-  return body;
 }
 
 async function PayoutB2C(id, amount, destination, notifyUrl, paymentMethod = 'santimpay') {
@@ -70,13 +72,15 @@ async function PayoutB2C(id, amount, destination, notifyUrl, paymentMethod = 'sa
     PaymentMethod: paymentMethod
   };
   const url = `${BASE_URL}/payout-b2c`;
-  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`SantimPay payout-b2c failed: ${res.status} ${t}`);
+  try {
+    const res = await axios.post(url, payload, { headers: { 'Content-Type': 'application/json' } });
+    return res.data;
+  } catch (e) {
+    const status = e.response?.status || 'ERR';
+    const data = e.response?.data;
+    const text = typeof data === 'string' ? data : JSON.stringify(data);
+    throw new Error(`SantimPay payout-b2c failed: ${status} ${text}`);
   }
-  const body = await res.json();
-  return body;
 }
 
 module.exports = { generateSignedTokenForDirectPayment, DirectPayment, PayoutB2C };
