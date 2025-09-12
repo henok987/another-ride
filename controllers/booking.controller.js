@@ -57,18 +57,22 @@ exports.create = async (req, res) => {
     
     // Require real passenger identity
     if (!passengerName || !passengerPhone) {
-      return res.status(422).json({ message: 'Passenger name and phone are required from auth token or user directory' });
-    }
-    
-    if (!passengerName || !passengerPhone) {
       try {
         const { getPassengerById } = require('../integrations/userServiceClient');
-        const info = await getPassengerById(passengerId);
+        const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
+        const info = await getPassengerById(passengerId, { headers: authHeader });
         if (info) {
           passengerName = passengerName || info.name;
           passengerPhone = passengerPhone || info.phone;
         }
-      } catch (_) {}
+      } catch (e) {
+        console.log('Failed to fetch passenger from user service:', e.message);
+      }
+    }
+    
+    // Final validation
+    if (!passengerName || !passengerPhone) {
+      return res.status(422).json({ message: 'Passenger name and phone are required from auth token or user directory' });
     }
 
     console.log('Creating booking with passenger data:', {

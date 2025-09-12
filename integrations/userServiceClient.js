@@ -31,15 +31,38 @@ async function httpPost(url, body, headers) {
 
 // Low-level helpers driven by env configuration
 function getAuthBase() {
-  return (process.env.AUTH_BASE_URL || '').replace(/\/$/, '');
+  return (process.env.AUTH_BASE_URL || 'http://localhost:3000').replace(/\/$/, '');
 }
 
 function getTemplate(name) {
   return process.env[name] || null;
 }
 
-// High-level API
+// Enhanced API with integrated user service support
 async function getPassengerDetails(id, token) {
+  try {
+    // First try the integrated user service
+    const integratedUrl = `${getAuthBase()}/user-service/passenger/${id}`;
+    const integratedData = await httpGet(integratedUrl, getAuthHeaders(token));
+    
+    if (integratedData && integratedData.success && integratedData.data) {
+      const u = integratedData.data;
+      return { 
+        success: true, 
+        user: { 
+          id: String(u.id || u._id || id), 
+          name: u.name, 
+          phone: u.phone, 
+          email: u.email,
+          externalId: u.externalId
+        } 
+      };
+    }
+  } catch (e) {
+    console.log('Integrated user service failed, trying external service:', e.message);
+  }
+
+  // Fallback to external service
   try {
     const tpl = getTemplate('PASSENGER_LOOKUP_URL_TEMPLATE') || `${getAuthBase()}/passengers/{id}`;
     const url = buildUrlFromTemplate(tpl, { id });
@@ -52,6 +75,36 @@ async function getPassengerDetails(id, token) {
 }
 
 async function getDriverDetails(id, token) {
+  try {
+    // First try the integrated user service
+    const integratedUrl = `${getAuthBase()}/user-service/driver/${id}`;
+    const integratedData = await httpGet(integratedUrl, getAuthHeaders(token));
+    
+    if (integratedData && integratedData.success && integratedData.data) {
+      const u = integratedData.data;
+      return { 
+        success: true, 
+        user: { 
+          id: String(u.id || u._id || id), 
+          name: u.name, 
+          phone: u.phone, 
+          email: u.email,
+          externalId: u.externalId,
+          vehicleType: u.vehicleType,
+          carPlate: u.carPlate,
+          carModel: u.carModel,
+          carColor: u.carColor,
+          rating: u.rating,
+          available: u.available,
+          lastKnownLocation: u.lastKnownLocation
+        } 
+      };
+    }
+  } catch (e) {
+    console.log('Integrated user service failed, trying external service:', e.message);
+  }
+
+  // Fallback to external service
   try {
     const tpl = getTemplate('DRIVER_LOOKUP_URL_TEMPLATE') || `${getAuthBase()}/drivers/{id}`;
     const url = buildUrlFromTemplate(tpl, { id });
@@ -67,17 +120,56 @@ async function getDriverById(id, options) {
   const token = options && options.headers ? options.headers.Authorization : undefined;
   const res = await getDriverDetails(id, token);
   if (!res.success) return null;
-  return { id: String(res.user.id), name: res.user.name, phone: res.user.phone, email: res.user.email };
+  return { 
+    id: String(res.user.id), 
+    name: res.user.name, 
+    phone: res.user.phone, 
+    email: res.user.email,
+    vehicleType: res.user.vehicleType,
+    carPlate: res.user.carPlate,
+    carModel: res.user.carModel,
+    carColor: res.user.carColor,
+    rating: res.user.rating,
+    available: res.user.available,
+    lastKnownLocation: res.user.lastKnownLocation
+  };
 }
 
 async function getPassengerById(id, options) {
   const token = options && options.headers ? options.headers.Authorization : undefined;
   const res = await getPassengerDetails(id, token);
   if (!res.success) return null;
-  return { id: String(res.user.id), name: res.user.name, phone: res.user.phone, email: res.user.email };
+  return { 
+    id: String(res.user.id), 
+    name: res.user.name, 
+    phone: res.user.phone, 
+    email: res.user.email,
+    externalId: res.user.externalId
+  };
 }
 
 async function getDriversByIds(ids = [], token) {
+  try {
+    // First try the integrated user service batch endpoint
+    const integratedUrl = `${getAuthBase()}/user-service/drivers/batch`;
+    const integratedData = await httpPost(integratedUrl, { ids }, getAuthHeaders(token));
+    
+    if (integratedData && integratedData.success && Array.isArray(integratedData.data)) {
+      return integratedData.data.map(u => ({ 
+        id: String(u.id || u._id || ''), 
+        name: u.name, 
+        phone: u.phone,
+        vehicleType: u.vehicleType,
+        carPlate: u.carPlate,
+        rating: u.rating,
+        available: u.available
+      }));
+    }
+  } catch (e) {
+    console.log('Integrated user service batch failed, trying external service:', e.message);
+  }
+
+  // Fallback to external service
   try {
     const base = getAuthBase();
     const url = `${base}/drivers/batch`;
@@ -93,6 +185,30 @@ async function getDriversByIds(ids = [], token) {
 
 async function listDrivers(query = {}, options) {
   try {
+    // First try the integrated user service
+    const integratedUrl = `${getAuthBase()}/user-service/driver`;
+    const url = new URL(integratedUrl);
+    Object.entries(query || {}).forEach(([k, v]) => { if (v != null) url.searchParams.set(k, v); });
+    
+    const integratedData = await httpGet(url.toString(), getAuthHeaders(options && options.headers ? options.headers.Authorization : undefined));
+    
+    if (integratedData && integratedData.success && Array.isArray(integratedData.data)) {
+      return integratedData.data.map(u => ({ 
+        id: String(u.id || u._id || ''), 
+        name: u.name, 
+        phone: u.phone,
+        vehicleType: u.vehicleType,
+        carPlate: u.carPlate,
+        rating: u.rating,
+        available: u.available
+      }));
+    }
+  } catch (e) {
+    console.log('Integrated user service list failed, trying external service:', e.message);
+  }
+
+  // Fallback to external service
+  try {
     const base = getAuthBase();
     const url = new URL(`${base}/drivers`);
     Object.entries(query || {}).forEach(([k, v]) => { if (v != null) url.searchParams.set(k, v); });
@@ -103,6 +219,27 @@ async function listDrivers(query = {}, options) {
 }
 
 async function listPassengers(query = {}, options) {
+  try {
+    // First try the integrated user service
+    const integratedUrl = `${getAuthBase()}/user-service/passenger`;
+    const url = new URL(integratedUrl);
+    Object.entries(query || {}).forEach(([k, v]) => { if (v != null) url.searchParams.set(k, v); });
+    
+    const integratedData = await httpGet(url.toString(), getAuthHeaders(options && options.headers ? options.headers.Authorization : undefined));
+    
+    if (integratedData && integratedData.success && Array.isArray(integratedData.data)) {
+      return integratedData.data.map(u => ({ 
+        id: String(u.id || u._id || ''), 
+        name: u.name, 
+        phone: u.phone,
+        email: u.email
+      }));
+    }
+  } catch (e) {
+    console.log('Integrated user service list failed, trying external service:', e.message);
+  }
+
+  // Fallback to external service
   try {
     const base = getAuthBase();
     const url = new URL(`${base}/passengers`);
