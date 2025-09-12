@@ -41,6 +41,7 @@ app.use('/v1/mapping', require('./routes/v1/mapping.routes'));
 app.use('/v1/pricing', require('./routes/v1/pricing.routes'));
 app.use('/v1/passengers', require('./routes/v1/passenger.routes'));
 app.use('/v1/analytics', require('./routes/v1/analytics.routes'));
+app.use('/v1/wallet', require('./routes/v1/wallet.routes'));
 
 // ---------- SERVER ----------
 const server = http.createServer(app);
