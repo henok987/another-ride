@@ -3164,3 +3164,40 @@
 		}
 	]
 }
+// ... existing code ...
+{
+  "name": "🔔 Webhooks",
+  "item": [
+    {
+      "name": "Public Webhook Echo (notifyUrl)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"sample\": \"data\",\n  \"meta\": { \"source\": \"postman\" }\n}" },
+        "url": {
+          "raw": "{{baseUrl}}/v1/webhooks/public?trace=1",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1","webhooks","public"],
+          "query": [{ "key": "trace", "value": "1" }]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Public Webhook Echo (GET verify)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/v1/webhooks/public?ping=1",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1","webhooks","public"],
+          "query": [{ "key": "ping", "value": "1" }]
+        }
+      },
+      "response": []
+    }
+  ]
+}
