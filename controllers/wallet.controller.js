@@ -30,7 +30,14 @@ exports.topup = async (req, res) => {
     });
 
     const notifyUrl = process.env.SANTIMPAY_NOTIFY_URL || `${process.env.BASE_URL || 'https://example.com'}/v1/wallet/webhook`;
-    const response = await DirectPayment(String(tx._id), amount, reason, notifyUrl, phoneNumber, paymentMethod);
+    const response = await DirectPayment({
+      Id: String(tx._id),
+      Amount: amount,
+      PaymentReason: reason,
+      PhoneNumber: phoneNumber,
+      PaymentMethod: paymentMethod,
+      NotifyUrl: notifyUrl
+    });
 
     // Store gateway response minimal data
     await Transaction.findByIdAndUpdate(tx._id, { metadata: { ...tx.metadata, gatewayResponse: response } });
