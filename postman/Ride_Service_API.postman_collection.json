@@ -1,0 +1,325 @@
+{
+  "info": {
+    "_postman_id": "9e8f1b5c-7a6f-4c68-9c4a-1e2b3c4d5e6f",
+    "name": "Ride Service API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /v1/health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "health"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "POST /v1/auth/passenger/register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"password\": \"Passw0rd!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/passenger/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "passenger",
+                "register"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /v1/auth/passenger/login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john@example.com\",\n  \"password\": \"Passw0rd!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/passenger/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "passenger",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /v1/auth/staff/login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"staff@example.com\",\n  \"password\": \"Passw0rd!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/staff/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "staff",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /v1/auth/admin/login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"Passw0rd!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/admin/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "admin",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Passengers",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          { "key": "token", "value": "{{token}}", "type": "string" }
+        ]
+      },
+      "item": [
+        { "name": "GET /v1/passengers", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/passengers", "host": ["{{baseUrl}}"], "path": ["v1","passengers"] } } },
+        { "name": "POST /v1/passengers", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"name\": \"Jane Passenger\",\n  \"email\": \"jane@example.com\"\n}"}, "url": { "raw": "{{baseUrl}}/v1/passengers", "host": ["{{baseUrl}}"], "path": ["v1","passengers"] } } },
+        { "name": "GET /v1/passengers/:id", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/passengers/{{passengerId}}", "host": ["{{baseUrl}}"], "path": ["v1","passengers","{{passengerId}}"] } } },
+        { "name": "PUT /v1/passengers/:id", "request": { "method": "PUT", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"name\": \"Jane Updated\"\n}"}, "url": { "raw": "{{baseUrl}}/v1/passengers/{{passengerId}}", "host": ["{{baseUrl}}"], "path": ["v1","passengers","{{passengerId}}"] } } },
+        { "name": "DELETE /v1/passengers/:id", "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/v1/passengers/{{passengerId}}", "host": ["{{baseUrl}}"], "path": ["v1","passengers","{{passengerId}}"] } } },
+        { "name": "GET /v1/passengers/me/profile", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/passengers/me/profile", "host": ["{{baseUrl}}"], "path": ["v1","passengers","me","profile"] } } },
+        { "name": "PUT /v1/passengers/me/profile", "request": { "method": "PUT", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"name\": \"Jane Passenger\"\n}"}, "url": { "raw": "{{baseUrl}}/v1/passengers/me/profile", "host": ["{{baseUrl}}"], "path": ["v1","passengers","me","profile"] } } },
+        { "name": "DELETE /v1/passengers/me", "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/v1/passengers/me", "host": ["{{baseUrl}}"], "path": ["v1","passengers","me"] } } },
+        { "name": "POST /v1/passengers/drivers/:driverId/rate", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"rating\": 5,\n  \"comment\": \"Great ride\"\n}"}, "url": { "raw": "{{baseUrl}}/v1/passengers/drivers/{{driverId}}/rate", "host": ["{{baseUrl}}"], "path": ["v1","passengers","drivers","{{driverId}}","rate"] } } }
+      ]
+    },
+    {
+      "name": "Drivers",
+      "auth": { "type": "bearer", "bearer": [{"key":"token","value":"{{token}}","type":"string"}] },
+      "item": [
+        { "name": "GET /v1/drivers", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/drivers", "host": ["{{baseUrl}}"], "path": ["v1","drivers"] } } },
+        { "name": "GET /v1/drivers/available", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/drivers/available", "host": ["{{baseUrl}}"], "path": ["v1","drivers","available"] } } },
+        { "name": "GET /v1/drivers/:id", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/drivers/{{driverId}}", "host": ["{{baseUrl}}"], "path": ["v1","drivers","{{driverId}}"] } } },
+        { "name": "POST /v1/drivers/:id/availability", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"available\": true\n}"}, "url": { "raw": "{{baseUrl}}/v1/drivers/{{driverId}}/availability", "host": ["{{baseUrl}}"], "path": ["v1","drivers","{{driverId}}","availability"] } } },
+        { "name": "POST /v1/drivers/:id/location", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"lat\": 9.03,\n  \"lng\": 38.74\n}"}, "url": { "raw": "{{baseUrl}}/v1/drivers/{{driverId}}/location", "host": ["{{baseUrl}}"], "path": ["v1","drivers","{{driverId}}","location"] } } },
+        { "name": "POST /v1/drivers/:id/set-external-id", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"externalId\": \"user-123\"\n}"}, "url": { "raw": "{{baseUrl}}/v1/drivers/{{driverId}}/set-external-id", "host": ["{{baseUrl}}"], "path": ["v1","drivers","{{driverId}}","set-external-id"] } } },
+        { "name": "POST /v1/drivers/estimate-fare", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"bookingId\": \"{{bookingId}}\"\n}"}, "url": { "raw": "{{baseUrl}}/v1/drivers/estimate-fare", "host": ["{{baseUrl}}"], "path": ["v1","drivers","estimate-fare"] } } },
+        { "name": "GET /v1/drivers/estimate-fare/:bookingId", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/drivers/estimate-fare/{{bookingId}}", "host": ["{{baseUrl}}"], "path": ["v1","drivers","estimate-fare","{{bookingId}}"] } } },
+        { "name": "POST /v1/drivers/discover-and-estimate", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"from\": { \"lat\": 9.03, \"lng\": 38.74 },\n  \"to\": { \"lat\": 9.05, \"lng\": 38.80 }\n}"}, "url": { "raw": "{{baseUrl}}/v1/drivers/discover-and-estimate", "host": ["{{baseUrl}}"], "path": ["v1","drivers","discover-and-estimate"] } } }
+      ]
+    },
+    {
+      "name": "Bookings",
+      "auth": { "type": "bearer", "bearer": [{"key":"token","value":"{{token}}","type":"string"}] },
+      "item": [
+        { "name": "POST /v1/bookings", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"pickup\": { \"lat\": 9.03, \"lng\": 38.74 },\n  \"dropoff\": { \"lat\": 9.05, \"lng\": 38.80 },\n  \"vehicleType\": \"mini\"\n}"}, "url": { "raw": "{{baseUrl}}/v1/bookings", "host": ["{{baseUrl}}"], "path": ["v1","bookings"] } } },
+        { "name": "GET /v1/bookings", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/bookings", "host": ["{{baseUrl}}"], "path": ["v1","bookings"] } } },
+        { "name": "GET /v1/bookings/debug/auth", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/bookings/debug/auth", "host": ["{{baseUrl}}"], "path": ["v1","bookings","debug","auth"] } } },
+        { "name": "GET /v1/bookings/:id", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/bookings/{{bookingId}}", "host": ["{{baseUrl}}"], "path": ["v1","bookings","{{bookingId}}"] } } },
+        { "name": "PUT /v1/bookings/:id", "request": { "method": "PUT", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"vehicleType\": \"sedan\"\n}"}, "url": { "raw": "{{baseUrl}}/v1/bookings/{{bookingId}}", "host": ["{{baseUrl}}"], "path": ["v1","bookings","{{bookingId}}"] } } },
+        { "name": "DELETE /v1/bookings/:id", "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/v1/bookings/{{bookingId}}", "host": ["{{baseUrl}}"], "path": ["v1","bookings","{{bookingId}}"] } } },
+        { "name": "POST /v1/bookings/:id/lifecycle", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"action\": \"accept\"\n}"}, "url": { "raw": "{{baseUrl}}/v1/bookings/{{bookingId}}/lifecycle", "host": ["{{baseUrl}}"], "path": ["v1","bookings","{{bookingId}}","lifecycle"] } } },
+        { "name": "POST /v1/bookings/:id/assign", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"driverId\": \"{{driverId}}\"\n}"}, "url": { "raw": "{{baseUrl}}/v1/bookings/{{bookingId}}/assign", "host": ["{{baseUrl}}"], "path": ["v1","bookings","{{bookingId}}","assign"] } } },
+        { "name": "POST /v1/bookings/estimate", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"from\": { \"lat\": 9.03, \"lng\": 38.74 },\n  \"to\": { \"lat\": 9.05, \"lng\": 38.80 }\n}"}, "url": { "raw": "{{baseUrl}}/v1/bookings/estimate", "host": ["{{baseUrl}}"], "path": ["v1","bookings","estimate"] } } },
+        { "name": "POST /v1/bookings/:id/rate-passenger", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"rating\": 5,\n  \"comment\": \"Polite passenger\"\n}"}, "url": { "raw": "{{baseUrl}}/v1/bookings/{{bookingId}}/rate-passenger", "host": ["{{baseUrl}}"], "path": ["v1","bookings","{{bookingId}}","rate-passenger"] } } },
+        { "name": "POST /v1/bookings/:id/rate-driver", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"rating\": 5,\n  \"comment\": \"Excellent driving\"\n}"}, "url": { "raw": "{{baseUrl}}/v1/bookings/{{bookingId}}/rate-driver", "host": ["{{baseUrl}}"], "path": ["v1","bookings","{{bookingId}}","rate-driver"] } } },
+        { "name": "GET /v1/bookings/vehicle/types", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/bookings/vehicle/types", "host": ["{{baseUrl}}"], "path": ["v1","bookings","vehicle","types"] } } }
+      ]
+    },
+    {
+      "name": "Assignments",
+      "auth": { "type": "bearer", "bearer": [{"key":"token","value":"{{token}}","type":"string"}] },
+      "item": [
+        { "name": "POST /v1/assignments", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"bookingId\": \"{{bookingId}}\",\n  \"driverId\": \"{{driverId}}\"\n}"}, "url": { "raw": "{{baseUrl}}/v1/assignments", "host": ["{{baseUrl}}"], "path": ["v1","assignments"] } } },
+        { "name": "GET /v1/assignments", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/assignments", "host": ["{{baseUrl}}"], "path": ["v1","assignments"] } } },
+        { "name": "GET /v1/assignments/:id", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/assignments/{{assignmentId}}", "host": ["{{baseUrl}}"], "path": ["v1","assignments","{{assignmentId}}"] } } },
+        { "name": "PUT /v1/assignments/:id", "request": { "method": "PUT", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"status\": \"active\"\n}"}, "url": { "raw": "{{baseUrl}}/v1/assignments/{{assignmentId}}", "host": ["{{baseUrl}}"], "path": ["v1","assignments","{{assignmentId}}"] } } },
+        { "name": "DELETE /v1/assignments/:id", "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/v1/assignments/{{assignmentId}}", "host": ["{{baseUrl}}"], "path": ["v1","assignments","{{assignmentId}}"] } } }
+      ]
+    },
+    {
+      "name": "Trips",
+      "auth": { "type": "bearer", "bearer": [{"key":"token","value":"{{token}}","type":"string"}] },
+      "item": [
+        { "name": "POST /v1/trips", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"bookingId\": \"{{bookingId}}\"\n}"}, "url": { "raw": "{{baseUrl}}/v1/trips", "host": ["{{baseUrl}}"], "path": ["v1","trips"] } } },
+        { "name": "GET /v1/trips", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/trips", "host": ["{{baseUrl}}"], "path": ["v1","trips"] } } },
+        { "name": "GET /v1/trips/:id", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/trips/{{tripId}}", "host": ["{{baseUrl}}"], "path": ["v1","trips","{{tripId}}"] } } },
+        { "name": "PUT /v1/trips/:id", "request": { "method": "PUT", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"status\": \"completed\"\n}"}, "url": { "raw": "{{baseUrl}}/v1/trips/{{tripId}}", "host": ["{{baseUrl}}"], "path": ["v1","trips","{{tripId}}"] } } },
+        { "name": "DELETE /v1/trips/:id", "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/v1/trips/{{tripId}}", "host": ["{{baseUrl}}"], "path": ["v1","trips","{{tripId}}"] } } }
+      ]
+    },
+    {
+      "name": "Live",
+      "auth": { "type": "bearer", "bearer": [{"key":"token","value":"{{token}}","type":"string"}] },
+      "item": [
+        { "name": "POST /v1/live", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"name\": \"Live Session\"\n}"}, "url": { "raw": "{{baseUrl}}/v1/live", "host": ["{{baseUrl}}"], "path": ["v1","live"] } } },
+        { "name": "GET /v1/live", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/live", "host": ["{{baseUrl}}"], "path": ["v1","live"] } } },
+        { "name": "GET /v1/live/:id", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/live/{{liveId}}", "host": ["{{baseUrl}}"], "path": ["v1","live","{{liveId}}"] } } },
+        { "name": "PUT /v1/live/:id", "request": { "method": "PUT", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"name\": \"Updated Live\"\n}"}, "url": { "raw": "{{baseUrl}}/v1/live/{{liveId}}", "host": ["{{baseUrl}}"], "path": ["v1","live","{{liveId}}"] } } },
+        { "name": "DELETE /v1/live/:id", "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/v1/live/{{liveId}}", "host": ["{{baseUrl}}"], "path": ["v1","live","{{liveId}}"] } } },
+        { "name": "POST /v1/live/push", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"lat\": 9.03,\n  \"lng\": 38.74\n}"}, "url": { "raw": "{{baseUrl}}/v1/live/push", "host": ["{{baseUrl}}"], "path": ["v1","live","push"] } } }
+      ]
+    },
+    {
+      "name": "Pricing",
+      "auth": { "type": "bearer", "bearer": [{"key":"token","value":"{{token}}","type":"string"}] },
+      "item": [
+        { "name": "POST /v1/pricing", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"name\": \"Default\",\n  \"baseFare\": 50\n}"}, "url": { "raw": "{{baseUrl}}/v1/pricing", "host": ["{{baseUrl}}"], "path": ["v1","pricing"] } } },
+        { "name": "GET /v1/pricing", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/pricing", "host": ["{{baseUrl}}"], "path": ["v1","pricing"] } } },
+        { "name": "GET /v1/pricing/:id", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/pricing/{{pricingId}}", "host": ["{{baseUrl}}"], "path": ["v1","pricing","{{pricingId}}"] } } },
+        { "name": "PUT /v1/pricing/:id", "request": { "method": "PUT", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"baseFare\": 60\n}"}, "url": { "raw": "{{baseUrl}}/v1/pricing/{{pricingId}}", "host": ["{{baseUrl}}"], "path": ["v1","pricing","{{pricingId}}"] } } },
+        { "name": "DELETE /v1/pricing/:id", "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/v1/pricing/{{pricingId}}", "host": ["{{baseUrl}}"], "path": ["v1","pricing","{{pricingId}}"] } } }
+      ]
+    },
+    {
+      "name": "Admins",
+      "auth": { "type": "bearer", "bearer": [{"key":"token","value":"{{token}}","type":"string"}] },
+      "item": [
+        { "name": "GET /v1/admins", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/admins", "host": ["{{baseUrl}}"], "path": ["v1","admins"] } } },
+        { "name": "GET /v1/admins/:id", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/admins/{{adminId}}", "host": ["{{baseUrl}}"], "path": ["v1","admins","{{adminId}}"] } } },
+        { "name": "POST /v1/admins", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"name\": \"New Admin\",\n  \"email\": \"newadmin@example.com\"\n}"}, "url": { "raw": "{{baseUrl}}/v1/admins", "host": ["{{baseUrl}}"], "path": ["v1","admins"] } } },
+        { "name": "PUT /v1/admins/:id", "request": { "method": "PUT", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"name\": \"Updated Admin\"\n}"}, "url": { "raw": "{{baseUrl}}/v1/admins/{{adminId}}", "host": ["{{baseUrl}}"], "path": ["v1","admins","{{adminId}}"] } } },
+        { "name": "DELETE /v1/admins/:id", "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/v1/admins/{{adminId}}", "host": ["{{baseUrl}}"], "path": ["v1","admins","{{adminId}}"] } } }
+      ]
+    },
+    {
+      "name": "Mapping",
+      "auth": { "type": "bearer", "bearer": [{"key":"token","value":"{{token}}","type":"string"}] },
+      "item": [
+        { "name": "POST /v1/mapping/route", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"from\": { \"lat\": 9.03, \"lng\": 38.74 },\n  \"to\": { \"lat\": 9.05, \"lng\": 38.80 },\n  \"vehicle\": \"mini\"\n}"}, "url": { "raw": "{{baseUrl}}/v1/mapping/route", "host": ["{{baseUrl}}"], "path": ["v1","mapping","route"] } } },
+        { "name": "POST /v1/mapping/eta", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"from\": { \"lat\": 9.03, \"lng\": 38.74 },\n  \"to\": { \"lat\": 9.05, \"lng\": 38.80 }\n}"}, "url": { "raw": "{{baseUrl}}/v1/mapping/eta", "host": ["{{baseUrl}}"], "path": ["v1","mapping","eta"] } } },
+        { "name": "GET /v1/mapping/booking/:id/progress", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/mapping/booking/{{bookingId}}/progress", "host": ["{{baseUrl}}"], "path": ["v1","mapping","booking","{{bookingId}}","progress"] } } }
+      ]
+    },
+    {
+      "name": "Analytics",
+      "auth": { "type": "bearer", "bearer": [{"key":"token","value":"{{token}}","type":"string"}] },
+      "item": [
+        { "name": "GET /v1/analytics/dashboard", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/analytics/dashboard", "host": ["{{baseUrl}}"], "path": ["v1","analytics","dashboard"] } } },
+        { "name": "GET /v1/analytics/reports/daily", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/analytics/reports/daily", "host": ["{{baseUrl}}"], "path": ["v1","analytics","reports","daily"] } } },
+        { "name": "GET /v1/analytics/reports/weekly", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/analytics/reports/weekly", "host": ["{{baseUrl}}"], "path": ["v1","analytics","reports","weekly"] } } },
+        { "name": "GET /v1/analytics/reports/monthly", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/analytics/reports/monthly", "host": ["{{baseUrl}}"], "path": ["v1","analytics","reports","monthly"] } } },
+        { "name": "GET /v1/analytics/earnings/driver", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/analytics/earnings/driver", "host": ["{{baseUrl}}"], "path": ["v1","analytics","earnings","driver"] } } },
+        { "name": "POST /v1/analytics/commission", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"rate\": 0.1\n}"}, "url": { "raw": "{{baseUrl}}/v1/analytics/commission", "host": ["{{baseUrl}}"], "path": ["v1","analytics","commission"] } } },
+        { "name": "GET /v1/analytics/commission", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/analytics/commission", "host": ["{{baseUrl}}"], "path": ["v1","analytics","commission"] } } },
+        { "name": "GET /v1/analytics/rides/history", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/analytics/rides/history", "host": ["{{baseUrl}}"], "path": ["v1","analytics","rides","history"] } } },
+        { "name": "GET /v1/analytics/trips/history/:userType/:userId", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/analytics/trips/history/{{userType}}/{{userId}}", "host": ["{{baseUrl}}"], "path": ["v1","analytics","trips","history","{{userType}}","{{userId}}"] } } },
+        { "name": "GET /v1/analytics/finance/overview", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/analytics/finance/overview", "host": ["{{baseUrl}}"], "path": ["v1","analytics","finance","overview"] } } },
+        { "name": "GET /v1/analytics/rewards/passenger", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/analytics/rewards/passenger", "host": ["{{baseUrl}}"], "path": ["v1","analytics","rewards","passenger"] } } },
+        { "name": "GET /v1/analytics/rewards/driver", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/analytics/rewards/driver", "host": ["{{baseUrl}}"], "path": ["v1","analytics","rewards","driver"] } } }
+      ]
+    },
+    {
+      "name": "Wallet",
+      "auth": { "type": "bearer", "bearer": [{"key":"token","value":"{{token}}","type":"string"}] },
+      "item": [
+        { "name": "POST /v1/wallet/topup", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"amount\": 100\n}"}, "url": { "raw": "{{baseUrl}}/v1/wallet/topup", "host": ["{{baseUrl}}"], "path": ["v1","wallet","topup"] } } },
+        { "name": "GET /v1/wallet/transactions", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/wallet/transactions", "host": ["{{baseUrl}}"], "path": ["v1","wallet","transactions"] } } },
+        { "name": "GET /v1/wallet/transactions/:userId", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/v1/wallet/transactions/{{userId}}", "host": ["{{baseUrl}}"], "path": ["v1","wallet","transactions","{{userId}}"] } } },
+        { "name": "POST /v1/wallet/withdraw", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"amount\": 50\n}"}, "url": { "raw": "{{baseUrl}}/v1/wallet/withdraw", "host": ["{{baseUrl}}"], "path": ["v1","wallet","withdraw"] } } },
+        { "name": "POST /v1/wallet/webhook", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\n  \"event\": \"payment_success\"\n}"}, "url": { "raw": "{{baseUrl}}/v1/wallet/webhook", "host": ["{{baseUrl}}"], "path": ["v1","wallet","webhook"] } } }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:4000" },
+    { "key": "token", "value": "" },
+    { "key": "passengerId", "value": "" },
+    { "key": "driverId", "value": "" },
+    { "key": "bookingId", "value": "" },
+    { "key": "assignmentId", "value": "" },
+    { "key": "tripId", "value": "" },
+    { "key": "pricingId", "value": "" },
+    { "key": "adminId", "value": "" },
+    { "key": "liveId", "value": "" },
+    { "key": "userType", "value": "passenger" },
+    { "key": "userId", "value": "" }
+  ]
+}
+
