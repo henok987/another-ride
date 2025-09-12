@@ -3,6 +3,8 @@ const router = express.Router();
 const { authenticate, authorize } = require('../../middleware/auth');
 
 router.use('/auth', require('./auth.routes'));
+// public webhooks (no auth)
+router.use('/webhooks', require('./webhooks.routes'));
 // all routes below require authentication
 router.use(authenticate);
 
