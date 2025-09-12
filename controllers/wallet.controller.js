@@ -7,7 +7,7 @@ const { DirectPayment, PayoutB2C } = require('../integrations/santimpay');
 
 exports.topup = async (req, res) => {
   try {
-    const { amount, paymentMethod = 'santimpay', phoneNumber, reason = 'Wallet Topup' } = req.body || {};
+    const { amount, paymentMethod = 'telebirr', phoneNumber, reason = 'Wallet Topup' } = req.body || {};
     if (!amount || amount <= 0) return res.status(400).json({ message: 'amount must be > 0' });
     if (!phoneNumber) return res.status(400).json({ message: 'phoneNumber is required' });
 

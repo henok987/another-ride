@@ -70,9 +70,10 @@ async function DirectPayment(id, amount, paymentReason, notifyUrl, phoneNumber, 
     MerchantID: GATEWAY_MERCHANT_ID,
     SignedToken: token,
     PhoneNumber: phoneNumber,
-    NotifyURL: notifyUrl,
-    PaymentMethod: paymentMethod
+    NotifyURL: notifyUrl
   };
+  const pm = normalizePaymentMethod(paymentMethod);
+  if (pm) payload.PaymentMethod = pm;
   const url = `${BASE_URL}/direct-payment`;
   const headers = { 'Content-Type': 'application/json' };
   return await requestWithRetry('direct-payment', url, payload, headers);
@@ -87,9 +88,10 @@ async function PayoutB2C(id, amount, destination, notifyUrl, paymentMethod = 'sa
     Destination: destination,
     MerchantID: GATEWAY_MERCHANT_ID,
     SignedToken: token,
-    NotifyURL: notifyUrl,
-    PaymentMethod: paymentMethod
+    NotifyURL: notifyUrl
   };
+  const pm = normalizePaymentMethod(paymentMethod);
+  if (pm) payload.PaymentMethod = pm;
   const url = `${BASE_URL}/payout-b2c`;
   const headers = { 'Content-Type': 'application/json' };
   return await requestWithRetry('payout-b2c', url, payload, headers);
@@ -123,5 +125,19 @@ async function requestWithRetry(opName, url, payload, headers, { attempts = 3, b
     }
   }
   throw lastErr || new Error(`SantimPay ${opName} failed: unknown error`);
+}
+
+function normalizePaymentMethod(method) {
+  if (!method) return undefined;
+  const s = String(method).toLowerCase().trim();
+  const map = {
+    telebirr: 'TeleBirr',
+    tele_birr: 'TeleBirr',
+    tb: 'TeleBirr',
+    cbe: 'CBE',
+    card: 'Card',
+    wallet: 'Wallet'
+  };
+  return map[s];
 }
 
