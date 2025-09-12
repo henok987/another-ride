@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const fetch = require('node-fetch');
+const axios = require('axios');
 require('dotenv').config();
 
 const BASE_URL = process.env.SANTIMPAY_BASE_URL || 'https://gateway.santimpay.com/api';
@@ -48,13 +48,14 @@ async function DirectPayment(id, amount, paymentReason, notifyUrl, phoneNumber, 
     PaymentMethod: paymentMethod
   };
   const url = `${BASE_URL}/direct-payment`;
-  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`SantimPay direct-payment failed: ${res.status} ${t}`);
+  try {
+    const { data } = await axios.post(url, payload, { headers: { 'Content-Type': 'application/json' }, timeout: 15000 });
+    return data;
+  } catch (err) {
+    const status = err.response && err.response.status;
+    const text = err.response && (typeof err.response.data === 'string' ? err.response.data : JSON.stringify(err.response.data));
+    throw new Error(`SantimPay direct-payment failed: ${status || 'ERR'} ${text || err.message}`);
   }
-  const body = await res.json();
-  return body;
 }
 
 async function PayoutB2C(id, amount, destination, notifyUrl, paymentMethod = 'santimpay') {
@@ -70,13 +71,14 @@ async function PayoutB2C(id, amount, destination, notifyUrl, paymentMethod = 'sa
     PaymentMethod: paymentMethod
   };
   const url = `${BASE_URL}/payout-b2c`;
-  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`SantimPay payout-b2c failed: ${res.status} ${t}`);
+  try {
+    const { data } = await axios.post(url, payload, { headers: { 'Content-Type': 'application/json' }, timeout: 15000 });
+    return data;
+  } catch (err) {
+    const status = err.response && err.response.status;
+    const text = err.response && (typeof err.response.data === 'string' ? err.response.data : JSON.stringify(err.response.data));
+    throw new Error(`SantimPay payout-b2c failed: ${status || 'ERR'} ${text || err.message}`);
   }
-  const body = await res.json();
-  return body;
 }
 
 module.exports = { generateSignedTokenForDirectPayment, DirectPayment, PayoutB2C };

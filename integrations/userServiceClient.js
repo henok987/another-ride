@@ -1,14 +1,11 @@
-let fetchFn = typeof fetch === 'function' ? fetch : null;
-if (!fetchFn) { try { fetchFn = require('node-fetch'); } catch (_) {} }
+const axios = require('axios');
 
 function buildUrlFromTemplate(template, params) {
   if (!template) return null;
   return Object.keys(params || {}).reduce((acc, key) => acc.replace(new RegExp(`{${key}}`, 'g'), encodeURIComponent(String(params[key]))), template);
 }
 
-async function safeJson(res) {
-  try { return await res.json(); } catch (_) { return null; }
-}
+async function safeJson(res) { return res && res.data ? res.data : null; }
 
 function extractUserCandidate(data) {
   return data?.data || data?.user || data?.account || data?.driver || data?.passenger || data || {};
@@ -37,11 +34,11 @@ function authHeadersFromOptions(options) {
 async function getPassengerById(passengerId, options = undefined) {
   try {
     const template = process.env.PASSENGER_LOOKUP_URL_TEMPLATE;
-    if (!fetchFn || !template || !passengerId) return null;
+    if (!template || !passengerId) return null;
     const url = buildUrlFromTemplate(template, { id: passengerId });
     const headers = authHeadersFromOptions(options);
-    const res = await fetchFn(url, { headers });
-    if (!res.ok) return null;
+    const res = await axios.get(url, { headers }).catch(() => null);
+    if (!res) return null;
     const data = await safeJson(res);
     const c = extractUserCandidate(data);
     return { id: String(passengerId), name: pickCommonName(c), phone: pickCommonPhone(c), email: pickCommonEmail(c) };
@@ -55,11 +52,11 @@ async function getDriverById(driverId, options = undefined) {
       const base = process.env.AUTH_BASE_URL.replace(/\/$/, '');
       template = `${base}/drivers/{id}`;
     }
-    if (!fetchFn || !template || !driverId) return null;
+    if (!template || !driverId) return null;
     const url = buildUrlFromTemplate(template, { id: driverId });
     const headers = authHeadersFromOptions(options);
-    const res = await fetchFn(url, { headers });
-    if (!res.ok) return null;
+    const res = await axios.get(url, { headers }).catch(() => null);
+    if (!res) return null;
     const data = await safeJson(res);
     const c = extractUserCandidate(data);
     return { id: String(driverId), name: pickCommonName(c), phone: pickCommonPhone(c), email: pickCommonEmail(c) };
@@ -68,7 +65,7 @@ async function getDriverById(driverId, options = undefined) {
 
 async function getDriversByIds(ids = [], options = undefined) {
   try {
-    if (!fetchFn || !Array.isArray(ids) || ids.length === 0) return [];
+    if (!Array.isArray(ids) || ids.length === 0) return [];
     const base = process.env.AUTH_BASE_URL;
     if (!base) {
       const results = await Promise.all((ids || []).map(id => getDriverById(id, options)));
@@ -77,8 +74,8 @@ async function getDriversByIds(ids = [], options = undefined) {
     const url = `${base.replace(/\/$/, '')}/drivers/batch`;
     const headers = authHeadersFromOptions(options);
     headers['Content-Type'] = 'application/json';
-    const res = await fetchFn(url, { method: 'POST', headers, body: JSON.stringify({ ids }) });
-    if (!res.ok) {
+    const res = await axios.post(url, { ids }, { headers }).catch(() => null);
+    if (!res) {
       const results = await Promise.all((ids || []).map(id => getDriverById(id, options)));
       return results.filter(Boolean);
     }
@@ -99,12 +96,12 @@ async function getDriversByIds(ids = [], options = undefined) {
 async function listPassengers(query = {}, options = undefined) {
   try {
     const base = process.env.AUTH_BASE_URL;
-    if (!fetchFn || !base) return [];
+    if (!base) return [];
     const url = new URL(`${base.replace(/\/$/, '')}/passengers`);
     Object.entries(query).forEach(([k, v]) => { if (v != null) url.searchParams.set(k, v); });
     const headers = authHeadersFromOptions(options);
-    const res = await fetchFn(url.toString(), { headers });
-    if (!res.ok) return [];
+    const res = await axios.get(url.toString(), { headers }).catch(() => null);
+    if (!res) return [];
     const data = await safeJson(res);
     const arr = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
     return arr.map(u => ({ id: String(u.id || u._id || u.userId || ''), name: u.name || u.fullName, phone: u.phone || u.msisdn, email: u.email || u.profile?.email }));
@@ -114,12 +111,12 @@ async function listPassengers(query = {}, options = undefined) {
 async function listDrivers(query = {}, options = undefined) {
   try {
     const base = process.env.AUTH_BASE_URL;
-    if (!fetchFn || !base) return [];
+    if (!base) return [];
     const url = new URL(`${base.replace(/\/$/, '')}/drivers`);
     Object.entries(query).forEach(([k, v]) => { if (v != null) url.searchParams.set(k, v); });
     const headers = authHeadersFromOptions(options);
-    const res = await fetchFn(url.toString(), { headers });
-    if (!res.ok) return [];
+    const res = await axios.get(url.toString(), { headers }).catch(() => null);
+    if (!res) return [];
     const data = await safeJson(res);
     const arr = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
     return arr.map(u => ({ id: String(u.id || u._id || u.userId || ''), name: u.name || u.fullName, phone: u.phone || u.msisdn, email: u.email || u.profile?.email }));
@@ -129,11 +126,11 @@ async function listDrivers(query = {}, options = undefined) {
 async function getStaffById(staffId, options = undefined) {
   try {
     const base = process.env.AUTH_BASE_URL;
-    if (!fetchFn || !base || !staffId) return null;
+    if (!base || !staffId) return null;
     const url = `${base.replace(/\/$/, '')}/staff/${encodeURIComponent(String(staffId))}`;
     const headers = authHeadersFromOptions(options);
-    const res = await fetchFn(url, { headers });
-    if (!res.ok) return null;
+    const res = await axios.get(url, { headers }).catch(() => null);
+    if (!res) return null;
     const data = await safeJson(res);
     const u = extractUserCandidate(data);
     return { id: String(u.id || u._id || staffId), name: pickCommonName(u), phone: pickCommonPhone(u), email: pickCommonEmail(u) };
@@ -143,12 +140,12 @@ async function getStaffById(staffId, options = undefined) {
 async function listStaff(query = {}, options = undefined) {
   try {
     const base = process.env.AUTH_BASE_URL;
-    if (!fetchFn || !base) return [];
+    if (!base) return [];
     const url = new URL(`${base.replace(/\/$/, '')}/staff`);
     Object.entries(query).forEach(([k, v]) => { if (v != null) url.searchParams.set(k, v); });
     const headers = authHeadersFromOptions(options);
-    const res = await fetchFn(url.toString(), { headers });
-    if (!res.ok) return [];
+    const res = await axios.get(url.toString(), { headers }).catch(() => null);
+    if (!res) return [];
     const data = await safeJson(res);
     const arr = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
     return arr.map(u => ({ id: String(u.id || u._id || ''), name: u.name || u.fullName, phone: u.phone || u.msisdn, email: u.email || u.profile?.email }));
@@ -158,11 +155,11 @@ async function listStaff(query = {}, options = undefined) {
 async function getAdminById(adminId, options = undefined) {
   try {
     const base = process.env.AUTH_BASE_URL;
-    if (!fetchFn || !base || !adminId) return null;
+    if (!base || !adminId) return null;
     const url = `${base.replace(/\/$/, '')}/admins/${encodeURIComponent(String(adminId))}`;
     const headers = authHeadersFromOptions(options);
-    const res = await fetchFn(url, { headers });
-    if (!res.ok) return null;
+    const res = await axios.get(url, { headers }).catch(() => null);
+    if (!res) return null;
     const data = await safeJson(res);
     const u = extractUserCandidate(data);
     return { id: String(u.id || u._id || adminId), name: pickCommonName(u), phone: pickCommonPhone(u), email: pickCommonEmail(u) };
@@ -172,12 +169,12 @@ async function getAdminById(adminId, options = undefined) {
 async function listAdmins(query = {}, options = undefined) {
   try {
     const base = process.env.AUTH_BASE_URL;
-    if (!fetchFn || !base) return [];
+    if (!base) return [];
     const url = new URL(`${base.replace(/\/$/, '')}/admins`);
     Object.entries(query).forEach(([k, v]) => { if (v != null) url.searchParams.set(k, v); });
     const headers = authHeadersFromOptions(options);
-    const res = await fetchFn(url.toString(), { headers });
-    if (!res.ok) return [];
+    const res = await axios.get(url.toString(), { headers }).catch(() => null);
+    if (!res) return [];
     const data = await safeJson(res);
     const arr = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
     return arr.map(u => ({ id: String(u.id || u._id || ''), name: u.name || u.fullName, phone: u.phone || u.msisdn, email: u.email || u.profile?.email }));
