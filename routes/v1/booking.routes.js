@@ -7,10 +7,11 @@ router.post('/', authenticate, authorize('passenger'), ctrl.create);
 router.get('/', authenticate, authorize('passenger','admin','superadmin'), ctrl.list);
 // Debug endpoint to check authentication
 router.get('/debug/auth', authenticate, (req, res) => {
+  const { id, type, name, phone, email, wallet, rating, rewardPoints, iat, exp } = req.user || {};
   res.json({ 
-    user: req.user, 
-    userType: req.user?.type, 
-    userId: req.user?.id,
+    user: { id, type, name, phone, email, wallet, rating, rewardPoints, iat, exp }, 
+    userType: type, 
+    userId: id,
     timestamp: new Date().toISOString()
   });
 });

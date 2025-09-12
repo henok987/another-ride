@@ -45,12 +45,19 @@ async function push(req, res) {
       await booking.save();
     }
     
+    // Normalize status to match Live schema enum
+    const allowedStatuses = ['moving','stopped','offline'];
+    let normalizedStatus = status;
+    if (status === 'ongoing') normalizedStatus = 'moving';
+    if (status === 'completed') normalizedStatus = 'stopped';
+    if (!allowedStatuses.includes(String(normalizedStatus || ''))) normalizedStatus = 'moving';
+
     // Create position update payload
     const payload = { 
       tripId, 
       latitude, 
       longitude, 
-      status, 
+      status: normalizedStatus, 
       locationType, 
       bookingId 
     };
