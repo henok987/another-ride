@@ -1,20 +1,23 @@
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
-let fetchFn = typeof fetch === 'function' ? fetch : null;
-if (!fetchFn) { try { fetchFn = require('node-fetch'); } catch (_) {} }
+const axios = require('axios');
 
 // Minimal JWKS cache
 const jwksCache = { keys: {}, fetchedAt: 0 };
 async function getSigningKey(kid) {
   const jwksUrl = process.env.AUTH_JWKS_URL;
-  if (!jwksUrl || !fetchFn) return null;
+  if (!jwksUrl) return null;
   const now = Date.now();
   if (jwksCache.fetchedAt && (now - jwksCache.fetchedAt) < 5 * 60 * 1000 && jwksCache.keys[kid]) {
     return jwksCache.keys[kid];
   }
-  const res = await fetchFn(jwksUrl);
-  if (!res.ok) return null;
-  const data = await res.json();
+  let data;
+  try {
+    const res = await axios.get(jwksUrl);
+    data = res.data;
+  } catch (_) {
+    return null;
+  }
   const keys = Array.isArray(data.keys) ? data.keys : [];
   jwksCache.keys = {};
   keys.forEach(k => { if (k.kid && k.x5c && k.x5c[0]) jwksCache.keys[k.kid] = `-----BEGIN CERTIFICATE-----\n${k.x5c[0]}\n-----END CERTIFICATE-----\n`; });
