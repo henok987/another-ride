@@ -1,4 +1,4 @@
-﻿const { Sequelize } = require('sequelize');
+﻿const { sequelize } = require('./config/database');
 require('dotenv').config();
 
 const database = process.env.DB_NAME || 'rideshare_db';
