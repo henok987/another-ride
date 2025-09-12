@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  user-service:
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - MONGODB_URI=mongodb://mongodb:27017/user-service
+      - JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+      - SERVICE_TOKENS=ride-service-token-123,payment-service-token-456,notification-service-token-789
+      - RIDE_SERVICE_URL=http://ride-service:4000
+      - PAYMENT_SERVICE_URL=http://payment-service:4001
+      - NOTIFICATION_SERVICE_URL=http://notification-service:4002
+      - EXTERNAL_SERVICE_TIMEOUT=5000
+      - EXTERNAL_SERVICE_RETRY_ATTEMPTS=3
+      - LOG_DIR=/app/logs
+      - MAX_LOG_SIZE=10485760
+      - MAX_LOG_FILES=5
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      - mongodb
+    networks:
+      - user-service-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  mongodb:
+    image: mongo:6.0
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=password
+      - MONGO_INITDB_DATABASE=user-service
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    networks:
+      - user-service-network
+    restart: unless-stopped
+
+  # Optional: Redis for caching and session storage
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - user-service-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  # Optional: Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - user-service
+    networks:
+      - user-service-network
+    restart: unless-stopped
+
+volumes:
+  mongodb_data:
+  redis_data:
+
+networks:
+  user-service-network:
+    driver: bridge
