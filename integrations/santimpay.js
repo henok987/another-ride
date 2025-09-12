@@ -74,14 +74,8 @@ async function DirectPayment(id, amount, paymentReason, notifyUrl, phoneNumber, 
     PaymentMethod: paymentMethod
   };
   const url = `${BASE_URL}/direct-payment`;
-  try {
-    const { data } = await axios.post(url, payload, { headers: { 'Content-Type': 'application/json' }, timeout: 15000 });
-    return data;
-  } catch (err) {
-    const status = err.response && err.response.status;
-    const text = err.response && (typeof err.response.data === 'string' ? err.response.data : JSON.stringify(err.response.data));
-    throw new Error(`SantimPay direct-payment failed: ${status || 'ERR'} ${text || err.message}`);
-  }
+  const headers = { 'Content-Type': 'application/json' };
+  return await requestWithRetry('direct-payment', url, payload, headers);
 }
 
 async function PayoutB2C(id, amount, destination, notifyUrl, paymentMethod = 'santimpay') {
@@ -97,15 +91,37 @@ async function PayoutB2C(id, amount, destination, notifyUrl, paymentMethod = 'sa
     PaymentMethod: paymentMethod
   };
   const url = `${BASE_URL}/payout-b2c`;
-  try {
-    const { data } = await axios.post(url, payload, { headers: { 'Content-Type': 'application/json' }, timeout: 15000 });
-    return data;
-  } catch (err) {
-    const status = err.response && err.response.status;
-    const text = err.response && (typeof err.response.data === 'string' ? err.response.data : JSON.stringify(err.response.data));
-    throw new Error(`SantimPay payout-b2c failed: ${status || 'ERR'} ${text || err.message}`);
-  }
+  const headers = { 'Content-Type': 'application/json' };
+  return await requestWithRetry('payout-b2c', url, payload, headers);
 }
 
 module.exports = { generateSignedTokenForDirectPayment, DirectPayment, PayoutB2C };
+
+function isTransientNetworkError(err) {
+  const code = err && (err.code || (err.cause && err.cause.code));
+  if (code && ['EAI_AGAIN','ENOTFOUND','ECONNRESET','ETIMEDOUT','ECONNABORTED','EHOSTUNREACH','EPIPE','EADDRINUSE'].includes(code)) return true;
+  const status = err && err.response && err.response.status;
+  return status && [502,503,504].includes(status);
+}
+
+async function requestWithRetry(opName, url, payload, headers, { attempts = 3, baseDelayMs = 500 } = {}) {
+  let lastErr = null;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const { data } = await axios.post(url, payload, { headers, timeout: 15000 });
+      return data;
+    } catch (err) {
+      lastErr = err;
+      if (!isTransientNetworkError(err) || i === attempts - 1) {
+        const status = err.response && err.response.status;
+        const text = err.response && (typeof err.response.data === 'string' ? err.response.data : JSON.stringify(err.response.data));
+        const code = err.code;
+        throw new Error(`SantimPay ${opName} failed: ${status || code || 'ERR'} ${text || err.message}`);
+      }
+      const delay = baseDelayMs * Math.pow(2, i);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw lastErr || new Error(`SantimPay ${opName} failed: unknown error`);
+}
 
