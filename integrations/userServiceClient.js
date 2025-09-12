@@ -1,185 +1,174 @@
-// bookingController.js (Booking Service)
-const dayjs = require('dayjs');
-const geolib = require('geolib');
-const { Booking, BookingAssignment, TripHistory } = require('../models/bookingModels');
-const { Pricing } = require('../models/pricing');
-const { broadcast } = require('../sockets');
-const positionUpdateService = require('../services/positionUpdate');
-const {
+const axios = require('axios');
+
+function buildUrlFromTemplate(template, params) {
+  if (!template) return null;
+  return Object.keys(params || {}).reduce(
+    (acc, key) => acc.replace(new RegExp(`{${key}}`, 'g'), encodeURIComponent(String(params[key]))),
+    template
+  );
+}
+
+function getAuthHeaders(tokenOrHeader) {
+  const headers = { 'Accept': 'application/json' };
+  if (!tokenOrHeader) return headers;
+  if (typeof tokenOrHeader === 'string') {
+    headers['Authorization'] = tokenOrHeader.startsWith('Bearer ') ? tokenOrHeader : `Bearer ${tokenOrHeader}`;
+  } else if (typeof tokenOrHeader === 'object') {
+    if (tokenOrHeader.Authorization) headers['Authorization'] = tokenOrHeader.Authorization;
+  }
+  return headers;
+}
+
+async function httpGet(url, headers) {
+  const res = await axios.get(url, { headers });
+  return res.data;
+}
+
+async function httpPost(url, body, headers) {
+  const res = await axios.post(url, body, { headers: { 'Content-Type': 'application/json', ...(headers || {}) } });
+  return res.data;
+}
+
+// Low-level helpers driven by env configuration
+function getAuthBase() {
+  return (process.env.AUTH_BASE_URL || '').replace(/\/$/, '');
+}
+
+function getTemplate(name) {
+  return process.env[name] || null;
+}
+
+// High-level API
+async function getPassengerDetails(id, token) {
+  try {
+    const tpl = getTemplate('PASSENGER_LOOKUP_URL_TEMPLATE') || `${getAuthBase()}/passengers/{id}`;
+    const url = buildUrlFromTemplate(tpl, { id });
+    const data = await httpGet(url, getAuthHeaders(token));
+    const u = data?.data || data?.user || data?.passenger || data;
+    return { success: true, user: { id: String(u.id || u._id || id), name: u.name, phone: u.phone, email: u.email } };
+  } catch (e) {
+    return { success: false, message: e.response?.data?.message || e.message };
+  }
+}
+
+async function getDriverDetails(id, token) {
+  try {
+    const tpl = getTemplate('DRIVER_LOOKUP_URL_TEMPLATE') || `${getAuthBase()}/drivers/{id}`;
+    const url = buildUrlFromTemplate(tpl, { id });
+    const data = await httpGet(url, getAuthHeaders(token));
+    const u = data?.data || data?.user || data?.driver || data;
+    return { success: true, user: { id: String(u.id || u._id || id), name: u.name, phone: u.phone, email: u.email } };
+  } catch (e) {
+    return { success: false, message: e.response?.data?.message || e.message };
+  }
+}
+
+async function getDriverById(id, options) {
+  const token = options && options.headers ? options.headers.Authorization : undefined;
+  const res = await getDriverDetails(id, token);
+  if (!res.success) return null;
+  return { id: String(res.user.id), name: res.user.name, phone: res.user.phone, email: res.user.email };
+}
+
+async function getPassengerById(id, options) {
+  const token = options && options.headers ? options.headers.Authorization : undefined;
+  const res = await getPassengerDetails(id, token);
+  if (!res.success) return null;
+  return { id: String(res.user.id), name: res.user.name, phone: res.user.phone, email: res.user.email };
+}
+
+async function getDriversByIds(ids = [], token) {
+  try {
+    const base = getAuthBase();
+    const url = `${base}/drivers/batch`;
+    const data = await httpPost(url, { ids }, getAuthHeaders(token));
+    const arr = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+    return arr.map(u => ({ id: String(u.id || u._id || ''), name: u.name, phone: u.phone }));
+  } catch (e) {
+    // fallback: fetch one by one
+    const results = await Promise.all((ids || []).map(id => getDriverById(id, { headers: getAuthHeaders(token) })));
+    return results.filter(Boolean);
+  }
+}
+
+async function listDrivers(query = {}, options) {
+  try {
+    const base = getAuthBase();
+    const url = new URL(`${base}/drivers`);
+    Object.entries(query || {}).forEach(([k, v]) => { if (v != null) url.searchParams.set(k, v); });
+    const data = await httpGet(url.toString(), getAuthHeaders(options && options.headers ? options.headers.Authorization : undefined));
+    const arr = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+    return arr.map(u => ({ id: String(u.id || u._id || ''), name: u.name, phone: u.phone }));
+  } catch (_) { return []; }
+}
+
+async function listPassengers(query = {}, options) {
+  try {
+    const base = getAuthBase();
+    const url = new URL(`${base}/passengers`);
+    Object.entries(query || {}).forEach(([k, v]) => { if (v != null) url.searchParams.set(k, v); });
+    const data = await httpGet(url.toString(), getAuthHeaders(options && options.headers ? options.headers.Authorization : undefined));
+    const arr = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+    return arr.map(u => ({ id: String(u.id || u._id || ''), name: u.name, phone: u.phone }));
+  } catch (_) { return []; }
+}
+
+async function getStaffById(id) {
+  try {
+    const base = getAuthBase();
+    const url = `${base}/staff/${encodeURIComponent(String(id))}`;
+    const data = await httpGet(url, getAuthHeaders());
+    const u = data?.data || data || {};
+    return { id: String(u.id || u._id || id), name: u.name, phone: u.phone };
+  } catch (_) { return null; }
+}
+
+async function listStaff(query = {}) {
+  try {
+    const base = getAuthBase();
+    const url = new URL(`${base}/staff`);
+    Object.entries(query || {}).forEach(([k, v]) => { if (v != null) url.searchParams.set(k, v); });
+    const data = await httpGet(url.toString(), getAuthHeaders());
+    const arr = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+    return arr.map(u => ({ id: String(u.id || u._id || ''), name: u.name, phone: u.phone }));
+  } catch (_) { return []; }
+}
+
+async function getAdminById(id) {
+  try {
+    const base = getAuthBase();
+    const url = `${base}/admins/${encodeURIComponent(String(id))}`;
+    const data = await httpGet(url, getAuthHeaders());
+    const u = data?.data || data || {};
+    return { id: String(u.id || u._id || id), name: u.name, phone: u.phone };
+  } catch (_) { return null; }
+}
+
+async function listAdmins(query = {}) {
+  try {
+    const base = getAuthBase();
+    const url = new URL(`${base}/admins`);
+    Object.entries(query || {}).forEach(([k, v]) => { if (v != null) url.searchParams.set(k, v); });
+    const data = await httpGet(url.toString(), getAuthHeaders());
+    const arr = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+    return arr.map(u => ({ id: String(u.id || u._id || ''), name: u.name, phone: u.phone }));
+  } catch (_) { return []; }
+}
+
+module.exports = {
+  // high level
   getPassengerDetails,
   getDriverDetails,
   getDriversByIds,
-} = require('../integrations/userServiceClient');
-
-// --- Fare Estimation ---
-async function estimateFare({ vehicleType = 'mini', pickup, dropoff }) {
-  const distanceKm =
-    geolib.getDistance(
-      { latitude: pickup.latitude, longitude: pickup.longitude },
-      { latitude: dropoff.latitude, longitude: dropoff.longitude }
-    ) / 1000;
-
-  const p =
-    (await Pricing.findOne({ vehicleType, isActive: true }).sort({ updatedAt: -1 })) || {
-      baseFare: 2,
-      perKm: 1,
-      perMinute: 0.2,
-      waitingPerMinute: 0.1,
-      surgeMultiplier: 1,
-    };
-
-  const fareBreakdown = {
-    base: p.baseFare,
-    distanceCost: distanceKm * p.perKm,
-    timeCost: 0,
-    waitingCost: 0,
-    surgeMultiplier: p.surgeMultiplier,
-  };
-
-  const fareEstimated =
-    (fareBreakdown.base +
-      fareBreakdown.distanceCost +
-      fareBreakdown.timeCost +
-      fareBreakdown.waitingCost) *
-    fareBreakdown.surgeMultiplier;
-
-  return { distanceKm, fareEstimated, fareBreakdown };
-}
-
-// --- Create Booking ---
-exports.create = async (req, res) => {
-  try {
-    const passengerId = String(req.user?.id);
-    if (!passengerId)
-      return res.status(400).json({ message: 'Invalid passenger ID: user not authenticated' });
-
-    const { vehicleType, pickup, dropoff } = req.body;
-    if (!pickup || !dropoff)
-      return res.status(400).json({ message: 'Pickup and dropoff locations are required' });
-
-    const est = await estimateFare({ vehicleType, pickup, dropoff });
-
-    const booking = await Booking.create({
-      passengerId,
-      vehicleType,
-      pickup,
-      dropoff,
-      distanceKm: est.distanceKm,
-      fareEstimated: est.fareEstimated,
-      fareBreakdown: est.fareBreakdown,
-      status: 'requested',
-    });
-
-    const token = req.headers.authorization;
-    const passengerResult = await getPassengerDetails(passengerId, token);
-
-    const responseData = {
-      id: String(booking._id),
-      booking,
-      passenger: passengerResult.success
-        ? passengerResult.user
-        : { id: passengerId, error: passengerResult.message },
-    };
-
-    return res.status(201).json(responseData);
-  } catch (e) {
-    return res.status(500).json({ message: `Failed to create booking: ${e.message}` });
-  }
-};
-
-// --- List Bookings ---
-exports.list = async (req, res) => {
-  try {
-    const userType = req.user?.type;
-    const userId = req.user?.id;
-    let query = {};
-
-    if (userType === 'passenger') {
-      query.passengerId = String(userId);
-    }
-
-    const rows = await Booking.find(query).sort({ createdAt: -1 }).lean();
-
-    const passengerIds = [...new Set(rows.map((r) => r.passengerId))];
-    const driverIds = [...new Set(rows.map((r) => r.driverId).filter(Boolean))];
-
-    const token = req.headers.authorization;
-
-    // Fetch passengers from User Service
-    const passengerPromises = passengerIds.map((id) => getPassengerDetails(id, token));
-    const passengerResults = await Promise.all(passengerPromises);
-    const passengerMap = {};
-    passengerResults.forEach((res, i) => {
-      passengerMap[passengerIds[i]] = res.success
-        ? res.user
-        : { id: passengerIds[i], error: res.message };
-    });
-
-    // Fetch drivers from User Service
-    let driverMap = {};
-    if (driverIds.length) {
-      try {
-        const infos = await getDriversByIds(driverIds, token);
-        driverMap = Object.fromEntries(
-          infos.map((d) => [String(d.id), { id: d.id, name: d.name, phone: d.phone }])
-        );
-      } catch (_) {}
-    }
-
-    const normalized = rows.map((b) => ({
-      id: String(b._id),
-      passengerId: b.passengerId,
-      passenger: passengerMap[b.passengerId],
-      driverId: b.driverId,
-      driver: driverMap[b.driverId],
-      vehicleType: b.vehicleType,
-      pickup: b.pickup,
-      dropoff: b.dropoff,
-      distanceKm: b.distanceKm,
-      fareEstimated: b.fareEstimated,
-      fareFinal: b.fareFinal,
-      fareBreakdown: b.fareBreakdown,
-      status: b.status,
-      createdAt: b.createdAt,
-      updatedAt: b.updatedAt,
-    }));
-
-    return res.json(normalized);
-  } catch (e) {
-    return res.status(500).json({ message: `Failed to retrieve bookings: ${e.message}` });
-  }
-};
-
-// --- Get Booking by ID ---
-exports.get = async (req, res) => {
-  try {
-    const userType = req.user?.type;
-    let query = { _id: req.params.id };
-    if (userType === 'passenger') query.passengerId = String(req.user?.id);
-
-    const item = await Booking.findOne(query).lean();
-    if (!item)
-      return res.status(404).json({ message: 'Booking not found or you do not have permission to access it' });
-
-    const token = req.headers.authorization;
-    const passengerResult = await getPassengerDetails(item.passengerId, token);
-    const driverResult = item.driverId ? await getDriverDetails(item.driverId, token) : null;
-
-    return res.json({
-      id: String(item._id),
-      ...item,
-      passenger: passengerResult.success
-        ? passengerResult.user
-        : { id: item.passengerId, error: passengerResult.message },
-      driver: driverResult
-        ? driverResult.success
-          ? driverResult.user
-          : { id: item.driverId, error: driverResult.message }
-        : null,
-    });
-  } catch (e) {
-    return res.status(500).json({ message: `Failed to retrieve booking: ${e.message}` });
-  }
+  // compatibility with existing controllers
+  getPassengerById,
+  getDriverById,
+  listDrivers,
+  listPassengers,
+  getStaffById,
+  listStaff,
+  getAdminById,
+  listAdmins
 };
 
 // --- Update Booking ---
