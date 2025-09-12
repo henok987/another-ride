@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const connectMongo = async () => {
   try {
-    const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/user-service';
+    const mongoUri = process.env.MONGODB_URI || process.env.DB_CONNECTION_STRING || 'mongodb://localhost:27017/user-service';
     const options = {
       useNewUrlParser: true,
       useUnifiedTopology: true,

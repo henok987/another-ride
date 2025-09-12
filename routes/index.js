@@ -8,7 +8,7 @@ const staffController = require('../controllers/staffController');
 const adminController = require('../controllers/adminController');
 
 // Import middleware
-const { authenticate, authorize, checkUserDataAccess, optionalAuth } = require('../middleware/auth');
+const { authenticate, authorize, optionalAuth } = require('../middleware/auth');
 
 // ===== PASSENGER ROUTES =====
 router.post('/passengers', passengerController.createPassenger);
