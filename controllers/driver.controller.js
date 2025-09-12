@@ -102,20 +102,23 @@ async function setAvailability(req, res) {
     const { getDriverById } = require('../integrations/userServiceClient');
     const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
     const lookupIdAvail = String(d.externalId || driverId);
-    const ext = await getDriverById(lookupIdAvail, { headers: authHeader });
+    let ext = await getDriverById(lookupIdAvail, { headers: authHeader });
+    if (!ext || (!ext.name && !ext.phone)) {
+      try { ext = await getDriverById(lookupIdAvail); } catch (_) {}
+    }
     const driverInfo = ext ? {
       id: String(driverId),
       name: ext.name,
       phone: ext.phone,
       email: ext.email,
       vehicleType: d.vehicleType
-    } : {
+    } : (d.name || d.phone || d.email) ? {
       id: String(driverId),
-      name: '',
-      phone: '',
-      email: '',
+      name: d.name || '',
+      phone: d.phone || '',
+      email: d.email || '',
       vehicleType: d.vehicleType
-    };
+    } : undefined;
     
     const response = {
       id: String(d._id),
@@ -159,20 +162,23 @@ async function updateLocation(req, res) {
     const { getDriverById: getDriverByIdA } = require('../integrations/userServiceClient');
     const authHeaderA = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
     const lookupIdLoc = String(d.externalId || driverId);
-    const extA = await getDriverByIdA(lookupIdLoc, { headers: authHeaderA });
+    let extA = await getDriverByIdA(lookupIdLoc, { headers: authHeaderA });
+    if (!extA || (!extA.name && !extA.phone)) {
+      try { extA = await getDriverByIdA(lookupIdLoc); } catch (_) {}
+    }
     const driverInfo = extA ? {
       id: String(driverId),
       name: extA.name,
       phone: extA.phone,
       email: extA.email,
       vehicleType: d.vehicleType
-    } : {
+    } : (d.name || d.phone || d.email) ? {
       id: String(driverId),
-      name: '',
-      phone: '',
-      email: '',
+      name: d.name || '',
+      phone: d.phone || '',
+      email: d.email || '',
       vehicleType: d.vehicleType
-    };
+    } : undefined;
     
     const response = {
       id: String(d._id),
@@ -543,7 +549,10 @@ module.exports.getLocation = async function getLocation(req, res) {
     const { getDriverById } = require('../integrations/userServiceClient');
     const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
     const lookupId = String(d.externalId || driverId);
-    const ext = await getDriverById(lookupId, { headers: authHeader });
+    let ext = await getDriverById(lookupId, { headers: authHeader });
+    if (!ext || (!ext.name && !ext.phone)) {
+      try { ext = await getDriverById(lookupId); } catch (_) {}
+    }
 
     const driverInfo = ext ? {
       id: String(driverId),
@@ -579,7 +588,10 @@ module.exports.getAvailability = async function getAvailability(req, res) {
     const { getDriverById } = require('../integrations/userServiceClient');
     const authHeader = req.headers && req.headers.authorization ? { Authorization: req.headers.authorization } : undefined;
     const lookupIdAvail = String(d.externalId || driverId);
-    const ext = await getDriverById(lookupIdAvail, { headers: authHeader });
+    let ext = await getDriverById(lookupIdAvail, { headers: authHeader });
+    if (!ext || (!ext.name && !ext.phone)) {
+      try { ext = await getDriverById(lookupIdAvail); } catch (_) {}
+    }
 
     return res.json({
       id: String(d._id),
