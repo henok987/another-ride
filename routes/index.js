@@ -1,68 +1,138 @@
+/**
+ * Main Routes Index
+ * Combines all route modules for the user service
+ */
+
 const express = require('express');
 const router = express.Router();
 
-// Import controllers
-const passengerController = require('../controllers/passengerController');
-const driverController = require('../controllers/driverController');
-const staffController = require('../controllers/staffController');
-const adminController = require('../controllers/adminController');
+// Import route modules
+const passengerRoutes = require('./passenger.routes');
+const driverRoutes = require('./driver.routes');
+const adminRoutes = require('./admin.routes');
 
-// Import middleware
-const { authenticate, authorize, checkUserDataAccess, optionalAuth } = require('../middleware/auth');
+// ===== API ROUTES =====
 
-// ===== PASSENGER ROUTES =====
-router.post('/passengers', passengerController.createPassenger);
-router.post('/passengers/auth', passengerController.authenticatePassenger);
+// Passenger routes
+router.use('/passenger', passengerRoutes);
 
-// Public routes (with optional auth for external service access)
-router.get('/passengers/:id', optionalAuth, passengerController.getPassengerById);
-router.get('/passengers/external/:externalId', optionalAuth, passengerController.getPassengerByExternalId);
+// Driver routes  
+router.use('/driver', driverRoutes);
 
-// Protected routes
-router.get('/passengers', authenticate, authorize('staff', 'admin'), passengerController.listPassengers);
-router.put('/passengers/:id', authenticate, authorize('passenger', 'staff', 'admin'), passengerController.updatePassenger);
-router.delete('/passengers/:id', authenticate, authorize('staff', 'admin'), passengerController.deletePassenger);
-router.post('/passengers/batch', authenticate, authorize('staff', 'admin'), passengerController.getPassengersByIds);
+// Admin routes
+router.use('/admin', adminRoutes);
 
-// ===== DRIVER ROUTES =====
-router.post('/drivers', driverController.createDriver);
-router.post('/drivers/auth', driverController.authenticateDriver);
+// ===== EXTERNAL SERVICE INTEGRATION ROUTES =====
 
-// Public routes (with optional auth for external service access)
-router.get('/drivers/:id', optionalAuth, driverController.getDriverById);
-router.get('/drivers/external/:externalId', optionalAuth, driverController.getDriverByExternalId);
+// These routes are specifically designed for external service integration
+// They provide simplified access patterns for the booking service
 
-// Protected routes
-router.get('/drivers', authenticate, authorize('staff', 'admin'), driverController.listDrivers);
-router.put('/drivers/:id', authenticate, authorize('driver', 'staff', 'admin'), driverController.updateDriver);
-router.delete('/drivers/:id', authenticate, authorize('staff', 'admin'), driverController.deleteDriver);
-router.post('/drivers/batch', authenticate, authorize('staff', 'admin'), driverController.getDriversByIds);
-router.put('/drivers/:id/rating', authenticate, authorize('passenger', 'staff', 'admin'), driverController.updateDriverRating);
+// Get passenger info for external services
+router.get('/passenger/:id', 
+  require('../middleware/rbac').validateExternalServiceAccess(),
+  require('../middleware/auth').authenticate,
+  require('../middleware/rbac').canAccessUserType('passenger'),
+  require('../middleware/rbac').filterResponseData('passenger'),
+  require('../controllers/passenger.controller').getPassengerById
+);
 
-// ===== STAFF ROUTES =====
-router.post('/staff', authenticate, authorize('admin'), staffController.createStaff);
-router.post('/staff/auth', staffController.authenticateStaff);
+// Get driver info for external services
+router.get('/driver/:id', 
+  require('../middleware/rbac').validateExternalServiceAccess(),
+  require('../middleware/auth').authenticate,
+  require('../middleware/rbac').canAccessUserType('driver'),
+  require('../middleware/rbac').filterResponseData('driver'),
+  require('../controllers/driver.controller').getDriverById
+);
 
-// Public routes (with optional auth for external service access)
-router.get('/staff/:id', optionalAuth, staffController.getStaffById);
-router.get('/staff/external/:externalId', optionalAuth, staffController.getStaffByExternalId);
+// Get user info by external ID for external services
+router.get('/passenger/external/:externalId', 
+  require('../middleware/rbac').validateExternalServiceAccess(),
+  require('../middleware/auth').authenticate,
+  require('../middleware/rbac').canAccessUserType('passenger'),
+  require('../middleware/rbac').filterResponseData('passenger'),
+  require('../controllers/passenger.controller').getPassengerByExternalId
+);
 
-// Protected routes
-router.get('/staff', authenticate, authorize('staff', 'admin'), staffController.listStaff);
-router.put('/staff/:id', authenticate, authorize('staff', 'admin'), staffController.updateStaff);
-router.delete('/staff/:id', authenticate, authorize('admin'), staffController.deleteStaff);
+router.get('/driver/external/:externalId', 
+  require('../middleware/rbac').validateExternalServiceAccess(),
+  require('../middleware/auth').authenticate,
+  require('../middleware/rbac').canAccessUserType('driver'),
+  require('../middleware/rbac').filterResponseData('driver'),
+  require('../controllers/driver.controller').getDriverByExternalId
+);
 
-// ===== ADMIN ROUTES =====
-router.post('/admins', authenticate, authorize('admin'), adminController.createAdmin);
-router.post('/admins/auth', adminController.authenticateAdmin);
+// Batch operations for external services
+router.post('/passengers/batch', 
+  require('../middleware/rbac').validateExternalServiceAccess(),
+  require('../middleware/auth').authenticate,
+  require('../middleware/rbac').requireStaff(),
+  require('../middleware/rbac').filterResponseData('passenger'),
+  require('../controllers/passenger.controller').getPassengersByIds
+);
 
-// Public routes (with optional auth for external service access)
-router.get('/admins/:id', optionalAuth, adminController.getAdminById);
-router.get('/admins/external/:externalId', optionalAuth, adminController.getAdminByExternalId);
+router.post('/drivers/batch', 
+  require('../middleware/rbac').validateExternalServiceAccess(),
+  require('../middleware/auth').authenticate,
+  require('../middleware/rbac').requireStaff(),
+  require('../middleware/rbac').filterResponseData('driver'),
+  require('../controllers/driver.controller').getDriversByIds
+);
 
-// Protected routes
-router.get('/admins', authenticate, authorize('admin'), adminController.listAdmins);
-router.put('/admins/:id', authenticate, authorize('admin'), adminController.updateAdmin);
-router.delete('/admins/:id', authenticate, authorize('admin'), adminController.deleteAdmin);
+// ===== HEALTH CHECK ROUTES =====
+
+// Service health check
+router.get('/health', (req, res) => {
+  res.json({
+    success: true,
+    service: 'user-service',
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    version: '2.0.0',
+    features: {
+      roleBasedAccess: true,
+      externalServiceIntegration: true,
+      dataFiltering: true,
+      batchOperations: true
+    }
+  });
+});
+
+// Service info
+router.get('/info', (req, res) => {
+  res.json({
+    success: true,
+    service: 'user-service',
+    description: 'External User Service for Booking Service Integration',
+    version: '2.0.0',
+    endpoints: {
+      passengers: '/api/passenger',
+      drivers: '/api/driver', 
+      admins: '/api/admin',
+      external: {
+        passenger: '/api/passenger/:id',
+        driver: '/api/driver/:id',
+        batch: {
+          passengers: '/api/passengers/batch',
+          drivers: '/api/drivers/batch'
+        }
+      }
+    },
+    authentication: {
+      methods: ['JWT', 'Service-to-Service'],
+      headers: {
+        jwt: 'Authorization: Bearer <token>',
+        service: 'X-Service-Token: <token>, X-Service-Name: <service>'
+      }
+    },
+    roleBasedAccess: {
+      passenger: 'Can access own data and basic driver info',
+      driver: 'Can access own data and basic passenger info', 
+      staff: 'Can access passenger, driver, and staff data',
+      admin: 'Can access all user data',
+      service: 'Can access filtered data based on service type'
+    }
+  });
+});
 
 module.exports = router;

@@ -18,11 +18,11 @@ app.use(helmet());
 app.use(express.json());
 app.use(morgan('dev'));
 
-// Rate limiter - more restrictive for external service
+// Rate limiter - optimized for external service access
 app.use(
   rateLimit({
     windowMs: 60 * 1000, // 1 minute
-    max: 200, // Allow more requests for external service
+    max: 300, // Increased limit for external service integration
     message: {
       error: 'Too many requests from this IP, please try again later.',
       retryAfter: '60 seconds'
@@ -35,25 +35,36 @@ app.get('/health', (req, res) => res.json({
   service: 'user-service',
   status: 'healthy',
   timestamp: new Date().toISOString(),
-  version: '1.0.0'
+  version: '2.0.0',
+  features: {
+    roleBasedAccess: true,
+    externalServiceIntegration: true,
+    dataFiltering: true,
+    batchOperations: true
+  }
 }));
 
-app.use('/api/v1', apiRoutes);
+// Main API routes
+app.use('/api', apiRoutes);
 
 // ---------- ERROR HANDLING ----------
 app.use((err, req, res, next) => {
   console.error('Error:', err);
   res.status(500).json({
+    success: false,
     error: 'Internal Server Error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong',
+    timestamp: new Date().toISOString()
   });
 });
 
 // 404 handler
 app.use('*', (req, res) => {
   res.status(404).json({
+    success: false,
     error: 'Not Found',
-    message: `Route ${req.method} ${req.originalUrl} not found`
+    message: `Route ${req.method} ${req.originalUrl} not found`,
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -66,10 +77,24 @@ connectMongo()
     console.log(`🔑 JWT Secret: ${process.env.JWT_SECRET ? 'Custom' : 'Default (secret)'}`);
     console.log(`🌐 User Service listening on port ${PORT}`);
     console.log(`📊 Health check: http://localhost:${PORT}/health`);
-    console.log(`🔗 API Base URL: http://localhost:${PORT}/api/v1`);
+    console.log(`🔗 API Base URL: http://localhost:${PORT}/api`);
+    console.log(`📋 Service Info: http://localhost:${PORT}/api/info`);
+    
+    // External service integration info
+    console.log(`\n🚀 External Service Integration Ready:`);
+    console.log(`   • Role-based data filtering: ✅`);
+    console.log(`   • Service-to-service authentication: ✅`);
+    console.log(`   • Batch operations: ✅`);
+    console.log(`   • Booking service endpoints: ✅`);
     
     server.listen(PORT, () => {
-      console.log(`✅ User Service started successfully`);
+      console.log(`✅ User Service v2.0.0 started successfully`);
+      console.log(`\n📖 Available Endpoints:`);
+      console.log(`   • GET  /api/passenger/:id - Get passenger info`);
+      console.log(`   • GET  /api/driver/:id - Get driver info`);
+      console.log(`   • POST /api/passengers/batch - Batch get passengers`);
+      console.log(`   • POST /api/drivers/batch - Batch get drivers`);
+      console.log(`   • GET  /api/admin/users - Get all users (admin only)`);
     });
   })
   .catch((e) => {
