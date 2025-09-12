@@ -60,7 +60,7 @@ app.use('*', (req, res) => {
 // ---------- SERVER ----------
 const server = http.createServer(app);
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 4000;
 connectMongo()
   .then(() => {
     console.log(`🔑 JWT Secret: ${process.env.JWT_SECRET ? 'Custom' : 'Default (secret)'}`);
