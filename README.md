@@ -1,220 +1,229 @@
-# User Service
+# RideShare Backend API
 
-A microservice that provides external access to user information for the Ride Service ecosystem. This service manages passengers, drivers, staff, and admin users with role-based access control.
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D14-brightgreen)](https://nodejs.org/)
+[![Express](https://img.shields.io/badge/express-4.x-lightgrey)](https://expressjs.com/)
+
+## Table of Contents
+
+- [Project Overview](#project-overview)
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Getting Started](#getting-started)
+- [Environment Variables](#environment-variables)
+- [Database and Migrations](#database-and-migrations)
+- [API Endpoints](#api-endpoints)
+- [Folder Structure](#folder-structure)
+- [Development Notes](#development-notes)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
+
+## Project Overview
+
+This is the backend API for the RideShare application, built using Express.js and MySQL (via Sequelize). It handles user management (passengers, drivers, staff, admins), authentication, RBAC, driver document uploads, ratings, and admin operations.
+
+---
 
 ## Features
 
-- **User Management**: Create, read, update, and delete users for all user types
-- **Role-Based Access Control**: Different access levels for passengers, drivers, staff, and admins
-- **External API Access**: Designed for integration with external services
-- **Authentication & Authorization**: JWT-based authentication with role-based permissions
-- **Data Sanitization**: Secure data exposure with sensitive information filtering
-- **Batch Operations**: Efficient batch retrieval of user data
-- **Pagination**: Optimized data retrieval with pagination support
+- User registration and authentication (Passenger, Driver, Staff, Admin)
+- Role and permission-based access control (RBAC)
+- Passenger profile management, including self-delete
+- Driver document uploads and approval workflow (pending/approved/rejected)
+- Passenger and Driver rating flows
+- Driver Wallet model with association
+- Basic rate limiting on auth endpoints
 
-## User Types & Access Control
+---
 
-### Passengers
-- **Can access**: Their own data
-- **External access**: Basic passenger information (name, phone, email)
-- **Protected by**: Authentication required for updates
+## Tech Stack
 
-### Drivers  
-- **Can access**: Their own data
-- **External access**: Basic driver information (name, phone, email, vehicle info)
-- **Protected by**: Authentication required for updates
+- Node.js
+- Express.js
+- MySQL / Sequelize ORM
+- JWT Authentication
+- Multer (file uploads)
+- Postman (collection provided)
 
-### Staff
-- **Can access**: Passenger, driver, and staff data
-- **External access**: All user types with basic information
-- **Protected by**: Staff or admin authentication required
+---
 
-### Admins
-- **Can access**: All user data (passengers, drivers, staff, admins)
-- **External access**: Complete user information
-- **Protected by**: Admin authentication required
+## Getting Started
 
-## API Endpoints
+### Prerequisites
 
-### Authentication
-- `POST /api/v1/passengers/auth` - Authenticate passenger
-- `POST /api/v1/drivers/auth` - Authenticate driver  
-- `POST /api/v1/staff/auth` - Authenticate staff
-- `POST /api/v1/admins/auth` - Authenticate admin
+- Node.js >= 14.x
+- MySQL
+- npm
 
-### Passengers
-- `POST /api/v1/passengers` - Create passenger
-- `GET /api/v1/passengers/:id` - Get passenger by ID (public)
-- `GET /api/v1/passengers/external/:externalId` - Get passenger by external ID (public)
-- `GET /api/v1/passengers` - List passengers (staff/admin only)
-- `PUT /api/v1/passengers/:id` - Update passenger
-- `DELETE /api/v1/passengers/:id` - Delete passenger (staff/admin only)
-- `POST /api/v1/passengers/batch` - Get passengers by IDs (staff/admin only)
+### Installation
 
-### Drivers
-- `POST /api/v1/drivers` - Create driver
-- `GET /api/v1/drivers/:id` - Get driver by ID (public)
-- `GET /api/v1/drivers/external/:externalId` - Get driver by external ID (public)
-- `GET /api/v1/drivers` - List drivers (staff/admin only)
-- `PUT /api/v1/drivers/:id` - Update driver
-- `DELETE /api/v1/drivers/:id` - Delete driver (staff/admin only)
-- `POST /api/v1/drivers/batch` - Get drivers by IDs (staff/admin only)
-- `PUT /api/v1/drivers/:id/rating` - Update driver rating
+```bash
+# Clone the repository
+git clone https://github.com/your-username/rideshare-backend.git
+cd rideshare-backend
 
-### Staff
-- `POST /api/v1/staff` - Create staff (admin only)
-- `GET /api/v1/staff/:id` - Get staff by ID (public)
-- `GET /api/v1/staff/external/:externalId` - Get staff by external ID (public)
-- `GET /api/v1/staff` - List staff (staff/admin only)
-- `PUT /api/v1/staff/:id` - Update staff
-- `DELETE /api/v1/staff/:id` - Delete staff (admin only)
+# Install dependencies
+npm install
+```
 
-### Admins
-- `POST /api/v1/admins` - Create admin (admin only)
-- `GET /api/v1/admins/:id` - Get admin by ID (public)
-- `GET /api/v1/admins/external/:externalId` - Get admin by external ID (public)
-- `GET /api/v1/admins` - List admins (admin only)
-- `PUT /api/v1/admins/:id` - Update admin (admin only)
-- `DELETE /api/v1/admins/:id` - Delete admin (admin only)
+### Configure Environment
 
-## Installation
+Create a `.env` file in the project root:
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd user-service
-   ```
+```bash
+DB_NAME=rideshare_db
+DB_USER=root
+DB_PASS=your_password
+DB_HOST=127.0.0.1
+DB_PORT=3306
+JWT_SECRET=change_me
+# If you use the provided Postman baseUrl (4000), set PORT=4000
+PORT=4000
+# Enable Sequelize SQL logs (true/false)
+SEQ_LOG=false
+```
 
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
+### Start the Server
 
-3. **Set up environment variables**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your configuration
-   ```
+```bash
+# Development (nodemon)
+npm run dev
 
-4. **Start the service**
-   ```bash
-   # Development
-   npm run dev
-   
-   # Production
-   npm start
-   ```
+# or Production
+npm start
+```
+
+The server starts at http://localhost:PORT (default 3000). All APIs are mounted under `/api`, e.g. `http://localhost:3000/api`.
+
+---
 
 ## Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PORT` | Server port | 3001 |
-| `NODE_ENV` | Environment | development |
-| `MONGODB_URI` | MongoDB connection string | mongodb://localhost:27017/user-service |
-| `JWT_SECRET` | JWT signing secret | your-super-secret-jwt-key |
-| `RIDE_SERVICE_URL` | Ride service URL for integration | http://localhost:4000 |
-| `RATE_LIMIT_MAX_REQUESTS` | Rate limit per window | 200 |
+- DB_NAME: Database name
+- DB_USER: Database username
+- DB_PASS: Database password
+- DB_HOST: Database host (default 127.0.0.1)
+- DB_PORT: Database port (default 3306)
+- JWT_SECRET: Secret for JWT signing
+- PORT: Server port (default 3000)
+- SEQ_LOG: Enable Sequelize logging (true/false)
 
-## Usage Examples
+---
 
-### Create a Passenger
-```bash
-curl -X POST http://localhost:3001/api/v1/passengers \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "John Doe",
-    "phone": "+1234567890",
-    "email": "john@example.com",
-    "password": "securepassword"
-  }'
-```
+## Database and Migrations
 
-### Get Driver Information (External Access)
-```bash
-curl -X GET http://localhost:3001/api/v1/drivers/external/DRIV_ABC123 \
-  -H "Authorization: Bearer <token>"
-```
+- On server start, `sequelize.sync({ alter: true })` will auto-create/update tables, including:
+  - `passengers.contract_id`
+  - `wallets` table and relations
 
-### Batch Get Passengers (Staff/Admin Only)
-```bash
-curl -X POST http://localhost:3001/api/v1/passengers/batch \
-  -H "Authorization: Bearer <staff-token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "ids": ["507f1f77bcf86cd799439011", "507f1f77bcf86cd799439012"]
-  }'
-```
-
-## Integration with Ride Service
-
-This user service is designed to be consumed by the main Ride Service. The Ride Service can:
-
-1. **Fetch user data** for passengers and drivers during booking
-2. **Validate user permissions** for different operations
-3. **Get batch user information** for efficient data retrieval
-4. **Maintain user profiles** with external ID references
-
-### External ID System
-
-Each user has an `externalId` that can be used by external services to reference users without exposing internal MongoDB ObjectIds.
-
-## Security Features
-
-- **Password Hashing**: bcrypt with salt rounds
-- **JWT Authentication**: Secure token-based authentication
-- **Rate Limiting**: Protection against abuse
-- **Data Sanitization**: Sensitive data filtering
-- **Role-Based Access**: Granular permission control
-- **Input Validation**: Request validation and sanitization
-
-## Health Check
+Optional manual scripts:
 
 ```bash
-curl http://localhost:3001/health
+# Run migration helper
+npm run migrate
+# Seed roles/permissions/superadmin
+npm run seed
 ```
 
-Response:
-```json
-{
-  "service": "user-service",
-  "status": "healthy",
-  "timestamp": "2024-01-01T00:00:00.000Z",
-  "version": "1.0.0"
-}
+Ensure MySQL is running and `.env` is configured before running migrations/seed.
+
+---
+
+## API Endpoints
+
+Base URL: `http://localhost:PORT/api`
+
+### Auth
+- POST `/auth/passenger/register`
+- POST `/auth/passenger/login`
+- POST `/auth/driver/register`
+- POST `/auth/driver/login`
+- POST `/auth/staff/login`
+- POST `/auth/admin/register`
+- POST `/auth/admin/login`
+
+### Passengers (admin)
+- GET `/passengers`
+- GET `/passengers/:id`
+- PUT `/passengers/:id`
+- DELETE `/passengers/:id`
+
+### Passengers (self)
+- GET `/passengers/profile/me`
+- PUT `/passengers/profile/me`
+- DELETE `/passengers/profile/me` (delete own account)
+- POST `/passengers/rate-driver/:driverId`
+
+### Drivers (admin)
+- GET `/drivers`
+- GET `/drivers/:id`
+- PUT `/drivers/:id`
+- DELETE `/drivers/:id`
+
+### Drivers (self)
+- GET `/drivers/profile/me`
+- PUT `/drivers/profile/me`
+- POST `/drivers/profile/me/toggle-availability`
+- POST `/drivers/:id/documents` (form-data uploads)
+- POST `/drivers/rate-passenger/:passengerId`
+
+### Admins
+- POST `/admins`
+- GET `/admins`
+- GET `/admins/:id`
+- PUT `/admins/:id`
+- DELETE `/admins/:id`
+- POST `/admins/drivers/:driverId/approve`
+- POST `/admins/drivers/:driverId/documents/approve`
+- POST `/admins/drivers/:driverId/documents/reject`
+- GET `/admins/drivers/pending-documents`
+- GET `/admins/users/filter?role=driver|passenger|staff|admin`
+- GET `/admins/staff?role=dispatcher`
+
+### Roles
+- POST `/roles`
+- GET `/roles`
+- GET `/roles/:id`
+- PUT `/roles/:id`
+- DELETE `/roles/:id`
+
+### Permissions
+- POST `/permissions`
+- GET `/permissions`
+- GET `/permissions/:id`
+- PUT `/permissions/:id`
+- DELETE `/permissions/:id`
+
+---
+
+## Folder Structure
+
+```
+.
+├── config/
+│   └── database.js
+├── controllers/
+├── middleware/
+├── models/
+├── postman/
+│   └── rideshare.postman_collection.json
+├── routes/
+├── seed/
+├── uploads/
+├── server.js
+├── package.json
+└── README.md
 ```
 
-## Development
-
-### Project Structure
-```
-user-service/
-├── config/          # Configuration files
-├── controllers/      # Route controllers
-├── middleware/       # Authentication & authorization
-├── models/          # Database models
-├── routes/          # API routes
-├── utils/           # Utility functions
-├── server.js        # Main server file
-└── package.json     # Dependencies
-```
-
-### Running Tests
-```bash
-npm test
-```
-
-### Code Style
-The project follows standard JavaScript/Node.js conventions with ESLint configuration.
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+Contributions are welcome. Please open an issue or submit a PR.
+
+---
 
 ## License
 
-ISC License - see LICENSE file for details.
+MIT

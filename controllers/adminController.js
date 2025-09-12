@@ -1,260 +1,186 @@
-const { Admin } = require('../models/userModels');
-const { 
-  hashPassword, 
-  comparePassword, 
-  generateToken,
-  formatResponse, 
-  formatError,
-  sanitizeUserData,
-  isValidEmail,
-  isValidPhone,
-  getPaginationParams,
-  formatPaginationResponse,
-  generateExternalId
-} = require('../utils/helpers');
+const { models, Op } = require('../models');
+const { hashPassword } = require('../utils/password');
 
-// Create admin
-const createAdmin = async (req, res) => {
-  try {
-    const { 
-      fullName, 
-      username, 
-      email, 
-      phone, 
-      password, 
-      department, 
-      position, 
-      adminLevel 
-    } = req.body;
+exports.create = async (req, res) => {
+try {
+const data = req.body;
+if (data.password) data.password = await hashPassword(data.password);
+const row = await models.Admin.create(data);
+return res.status(201).json(row);
+} catch (e) { return res.status(500).json({ message: e.message }); }
+};
+exports.list = async (req, res) => { try { const rows = await models.Admin.findAll({ include: ['roles'] }); return res.json(rows); } catch (e) { return res.status(500).json({ message: e.message }); } };
+exports.get = async (req, res) => { try { const row = await models.Admin.findByPk(req.params.id, { include: ['roles'] }); if (!row) return res.status(404).json({ message: 'Not found' }); return res.json(row); } catch (e) { return res.status(500).json({ message: e.message }); } };
+exports.update = async (req, res) => {
+try {
+const data = req.body;
+if (data.password) data.password = await hashPassword(data.password);
+const [count] = await models.Admin.update(data, { where: { id: req.params.id } });
+if (!count) return res.status(404).json({ message: 'Not found' });
+const updated = await models.Admin.findByPk(req.params.id);
+return res.json(updated);
+} catch (e) { return res.status(500).json({ message: e.message }); }
+};
+exports.remove = async (req, res) => { try { const count = await models.Admin.destroy({ where: { id: req.params.id } }); if (!count) return res.status(404).json({ message: 'Not found' }); return res.status(204).send(); } catch (e) { return res.status(500).json({ message: e.message }); } };
 
-    // Validation
-    if (!fullName || !username || !email || !password) {
-      return res.status(400).json(formatError('Full name, username, email, and password are required', 400));
-    }
-
-    if (!isValidEmail(email)) {
-      return res.status(400).json(formatError('Invalid email format', 400));
-    }
-
-    if (phone && !isValidPhone(phone)) {
-      return res.status(400).json(formatError('Invalid phone format', 400));
-    }
-
-    // Check if admin already exists
-    const existingAdmin = await Admin.findOne({
-      $or: [{ email }, { username }]
-    });
-
-    if (existingAdmin) {
-      return res.status(409).json(formatError('Admin with this email or username already exists', 409));
-    }
-
-    // Create new admin
-    const adminData = {
-      externalId: generateExternalId('ADMN'),
-      fullName,
-      username,
-      email,
-      phone: phone || undefined,
-      password: await hashPassword(password),
-      department: department || undefined,
-      position: position || undefined,
-      adminLevel: adminLevel || 'admin'
-    };
-
-    const admin = await Admin.create(adminData);
-    const token = generateToken({ ...admin.toObject(), role: 'admin' });
-
-    res.status(201).json(formatResponse({
-      user: sanitizeUserData(admin),
-      token
-    }, 'Admin created successfully', 201));
-
-  } catch (error) {
-    console.error('Create admin error:', error);
-    res.status(500).json(formatError('Failed to create admin', 500, error));
-  }
+exports.approveDriver = async (req, res) => {
+try {
+const driver = await models.Driver.findByPk(req.params.driverId);
+if (!driver) return res.status(404).json({ message: 'Driver not found' });
+driver.verification = true;
+driver.documentStatus = 'approved';
+await driver.save();
+return res.json(driver);
+} catch (e) { return res.status(500).json({ message: e.message }); }
 };
 
-// Get admin by ID
-const getAdminById = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const admin = await Admin.findById(id).populate('roles');
-
-    if (!admin) {
-      return res.status(404).json(formatError('Admin not found', 404));
-    }
-
-    res.json(formatResponse(sanitizeUserData(admin)));
-
-  } catch (error) {
-    console.error('Get admin error:', error);
-    res.status(500).json(formatError('Failed to get admin', 500, error));
-  }
+exports.approveDriverDocuments = async (req, res) => {
+try {
+const driver = await models.Driver.findByPk(req.params.driverId);
+if (!driver) return res.status(404).json({ message: 'Driver not found' });
+driver.documentStatus = 'approved';
+await driver.save();
+return res.json(driver);
+} catch (e) { return res.status(500).json({ message: e.message }); }
 };
 
-// Get admin by external ID
-const getAdminByExternalId = async (req, res) => {
-  try {
-    const { externalId } = req.params;
-    const admin = await Admin.findOne({ externalId }).populate('roles');
-
-    if (!admin) {
-      return res.status(404).json(formatError('Admin not found', 404));
-    }
-
-    res.json(formatResponse(sanitizeUserData(admin)));
-
-  } catch (error) {
-    console.error('Get admin by external ID error:', error);
-    res.status(500).json(formatError('Failed to get admin', 500, error));
-  }
+exports.rejectDriverDocuments = async (req, res) => {
+try {
+const driver = await models.Driver.findByPk(req.params.driverId);
+if (!driver) return res.status(404).json({ message: 'Driver not found' });
+driver.documentStatus = 'rejected';
+await driver.save();
+return res.json(driver);
+} catch (e) { return res.status(500).json({ message: e.message }); }
 };
 
-// List admins with pagination
-const listAdmins = async (req, res) => {
-  try {
-    const { page, limit, skip } = getPaginationParams(req.query);
-    const { search, adminLevel, isActive } = req.query;
-
-    // Build query
-    let query = {};
-    if (search) {
-      query.$or = [
-        { fullName: { $regex: search, $options: 'i' } },
-        { username: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } }
-      ];
-    }
-    if (adminLevel) {
-      query.adminLevel = adminLevel;
-    }
-    if (isActive !== undefined) {
-      query.isActive = isActive === 'true';
-    }
-
-    const admins = await Admin.find(query)
-      .populate('roles')
-      .skip(skip)
-      .limit(limit)
-      .sort({ createdAt: -1 });
-
-    const total = await Admin.countDocuments(query);
-
-    const sanitizedAdmins = admins.map(admin => sanitizeUserData(admin));
-
-    res.json(formatResponse(formatPaginationResponse(sanitizedAdmins, page, limit, total)));
-
-  } catch (error) {
-    console.error('List admins error:', error);
-    res.status(500).json(formatError('Failed to list admins', 500, error));
+exports.getPendingDriverDocuments = async (req, res) => {
+try {
+// Return any drivers whose account/documents are pending review
+const drivers = await models.Driver.findAll({
+  where: {
+    [Op.or]: [
+      { status: 'pending' },
+      { documentStatus: 'pending' },
+      { documentStatus: null },
+      { documentStatus: '' }
+    ]
   }
+});
+return res.json(drivers);
+} catch (e) { return res.status(500).json({ message: e.message }); }
 };
 
-// Update admin
-const updateAdmin = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updateData = { ...req.body };
+exports.filterByRole = async (req, res) => {
+try {
+const { role } = req.query;
+if (!role) return res.status(400).json({ message: 'Role parameter is required' });
 
-    // Remove fields that shouldn't be updated directly
-    delete updateData.password;
-    delete updateData.externalId;
-    delete updateData._id;
+let users = [];
+switch (role.toLowerCase()) {
+case 'passenger':
+users = await models.Passenger.findAll({ include: ['roles'] });
+break;
+case 'driver':
+users = await models.Driver.findAll({ include: ['roles'] });
+break;
+case 'staff':
+users = await models.Staff.findAll({ include: ['roles'] });
+break;
+case 'admin':
+users = await models.Admin.findAll({ include: ['roles'] });
+break;
+default:
+return res.status(400).json({ message: 'Invalid role. Use: passenger, driver, staff, admin' });
+}
 
-    // Validate email if provided
-    if (updateData.email && !isValidEmail(updateData.email)) {
-      return res.status(400).json(formatError('Invalid email format', 400));
-    }
-
-    // Validate phone if provided
-    if (updateData.phone && !isValidPhone(updateData.phone)) {
-      return res.status(400).json(formatError('Invalid phone format', 400));
-    }
-
-    const admin = await Admin.findByIdAndUpdate(
-      id,
-      updateData,
-      { new: true, runValidators: true }
-    ).populate('roles');
-
-    if (!admin) {
-      return res.status(404).json(formatError('Admin not found', 404));
-    }
-
-    res.json(formatResponse(sanitizeUserData(admin), 'Admin updated successfully'));
-
-  } catch (error) {
-    console.error('Update admin error:', error);
-    res.status(500).json(formatError('Failed to update admin', 500, error));
-  }
+return res.json(users);
+} catch (e) { return res.status(500).json({ message: e.message }); }
 };
 
-// Delete admin
-const deleteAdmin = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const admin = await Admin.findByIdAndDelete(id);
-
-    if (!admin) {
-      return res.status(404).json(formatError('Admin not found', 404));
-    }
-
-    res.status(204).send();
-
-  } catch (error) {
-    console.error('Delete admin error:', error);
-    res.status(500).json(formatError('Failed to delete admin', 500, error));
-  }
+exports.listStaffByRole = async (req, res) => {
+try {
+const { role, roleId } = req.query; // supports role name or roleId
+let include = ['roles'];
+if (roleId) {
+  include = [{ association: 'roles', where: { id: Number(roleId) }, required: true }];
+} else if (role) {
+  include = [{ association: 'roles', where: { name: role }, required: true }];
+}
+const staff = await models.Staff.findAll({ include });
+return res.json(staff);
+} catch (e) { return res.status(500).json({ message: e.message }); }
 };
 
-// Authenticate admin
-const authenticateAdmin = async (req, res) => {
-  try {
-    const { username, password } = req.body;
-
-    if (!username || !password) {
-      return res.status(400).json(formatError('Username and password are required', 400));
-    }
-
-    const admin = await Admin.findOne({ username });
-    if (!admin) {
-      return res.status(401).json(formatError('Invalid credentials', 401));
-    }
-
-    const isPasswordValid = await comparePassword(password, admin.password);
-    if (!isPasswordValid) {
-      return res.status(401).json(formatError('Invalid credentials', 401));
-    }
-
-    if (!admin.isActive) {
-      return res.status(403).json(formatError('Account is deactivated', 403));
-    }
-
-    // Update last login
-    admin.lastLoginAt = new Date();
-    await admin.save();
-
-    const token = generateToken({ ...admin.toObject(), role: 'admin' });
-
-    res.json(formatResponse({
-      user: sanitizeUserData(admin),
-      token
-    }, 'Authentication successful'));
-
-  } catch (error) {
-    console.error('Authenticate admin error:', error);
-    res.status(500).json(formatError('Authentication failed', 500, error));
-  }
+// Award reward points to a driver (admin-only)
+exports.awardDriverPoints = async (req, res) => {
+try {
+const { driverId } = req.params;
+const { points } = req.body;
+const amount = Number(points);
+if (!Number.isFinite(amount) || amount === 0) return res.status(400).json({ message: 'points must be a non-zero number' });
+const driver = await models.Driver.findByPk(driverId);
+if (!driver) return res.status(404).json({ message: 'Driver not found' });
+driver.rewardPoints = (driver.rewardPoints || 0) + amount;
+await driver.save();
+return res.json({ message: 'Driver points updated', driverId: driver.id, rewardPoints: driver.rewardPoints });
+} catch (e) { return res.status(500).json({ message: e.message }); }
 };
 
-module.exports = {
-  createAdmin,
-  getAdminById,
-  getAdminByExternalId,
-  listAdmins,
-  updateAdmin,
-  deleteAdmin,
-  authenticateAdmin
+// Award reward points to a passenger (admin-only)
+exports.awardPassengerPoints = async (req, res) => {
+try {
+const { passengerId } = req.params;
+const { points } = req.body;
+const amount = Number(points);
+if (!Number.isFinite(amount) || amount === 0) return res.status(400).json({ message: 'points must be a non-zero number' });
+const passenger = await models.Passenger.findByPk(passengerId);
+if (!passenger) return res.status(404).json({ message: 'Passenger not found' });
+passenger.rewardPoints = (passenger.rewardPoints || 0) + amount;
+await passenger.save();
+return res.json({ message: 'Passenger points updated', passengerId: passenger.id, rewardPoints: passenger.rewardPoints });
+} catch (e) { return res.status(500).json({ message: e.message }); }
+};
+
+// Update a driver's status-related fields (verification, documentStatus, availability, status)
+exports.updateDriverStatus = async (req, res) => {
+try {
+const { id } = req.params;
+const { verification, documentStatus, availability, status } = req.body || {};
+const driver = await models.Driver.findByPk(id);
+if (!driver) return res.status(404).json({ message: 'Driver not found' });
+
+if (typeof verification !== 'undefined') driver.verification = Boolean(verification);
+if (typeof documentStatus !== 'undefined') driver.documentStatus = documentStatus;
+if (typeof availability !== 'undefined') driver.availability = Boolean(availability);
+
+ // Optional: update high-level account status
+ if (typeof status !== 'undefined') {
+   let normalized = String(status).toLowerCase();
+   if (normalized === 'active') normalized = 'approved';
+   const allowed = ['pending', 'approved', 'suspended', 'rejected'];
+   if (!allowed.includes(normalized)) {
+     return res.status(400).json({ 
+       message: "Invalid status. Allowed values: pending, approved, suspended, rejected." 
+     });
+   }
+   driver.status = normalized;
+   // Apply side-effects
+   if (normalized === 'approved') {
+     driver.verification = true;
+     driver.documentStatus = 'approved';
+   } else if (normalized === 'pending') {
+     driver.verification = false;
+     driver.documentStatus = 'pending';
+   } else if (normalized === 'suspended') {
+     driver.availability = false;
+   } else if (normalized === 'rejected') {
+     driver.verification = false;
+     driver.documentStatus = 'rejected';
+   }
+ }
+
+await driver.save();
+return res.json({ message: 'Driver status updated', driver });
+} catch (e) { return res.status(500).json({ message: e.message }); }
 };

@@ -1,267 +1,94 @@
-const { Passenger } = require('../models/userModels');
-const { 
-  hashPassword, 
-  comparePassword, 
-  generateToken,
-  formatResponse, 
-  formatError,
-  sanitizeUserData,
-  isValidEmail,
-  isValidPhone,
-  getPaginationParams,
-  formatPaginationResponse,
-  generateExternalId
-} = require('../utils/helpers');
+const { models } = require('../models');
+const { hashPassword } = require('../utils/password');
 
-// Create passenger
-const createPassenger = async (req, res) => {
-  try {
-    const { name, phone, email, password, emergencyContacts, preferences } = req.body;
+exports.create = async (req, res) => {
+try {
+const data = req.body;
+if (data.password) data.password = await hashPassword(data.password);
+const row = await models.Passenger.create(data);
+return res.status(201).json(row);
+} catch (e) { return res.status(500).json({ message: e.message }); }
+};
+exports.list = async (req, res) => { try { const rows = await models.Passenger.findAll({ include: ['roles'] }); return res.json(rows); } catch (e) { return res.status(500).json({ message: e.message }); } };
+exports.get = async (req, res) => { try { const row = await models.Passenger.findByPk(req.params.id, { include: ['roles'] }); if (!row) return res.status(404).json({ message: 'Not found' }); return res.json(row); } catch (e) { return res.status(500).json({ message: e.message }); } };
+exports.update = async (req, res) => {
+try {
+const body = req.body || {};
 
-    // Validation
-    if (!name || !phone || !email || !password) {
-      return res.status(400).json(formatError('Name, phone, email, and password are required', 400));
-    }
+// Admin route: restrict updates to admin-controlled fields only
+// Explicitly block rating fields regardless of input
+const allowedFields = ['contractId', 'wallet'];
+const data = {};
+for (const key of allowedFields) {
+if (Object.prototype.hasOwnProperty.call(body, key)) data[key] = body[key];
+}
+// Never allow rating fields through this endpoint
+if ('rating' in data) delete data.rating;
+if ('ratingCount' in data) delete data.ratingCount;
 
-    if (!isValidEmail(email)) {
-      return res.status(400).json(formatError('Invalid email format', 400));
-    }
+if (Object.keys(data).length === 0) {
+return res.status(400).json({ message: 'No updatable fields provided. Allowed fields: contractId, wallet' });
+}
 
-    if (!isValidPhone(phone)) {
-      return res.status(400).json(formatError('Invalid phone format', 400));
-    }
+const [count] = await models.Passenger.update(data, { where: { id: req.params.id } });
+if (!count) return res.status(404).json({ message: 'Not found' });
+const updated = await models.Passenger.findByPk(req.params.id);
+return res.json(updated);
+} catch (e) { return res.status(500).json({ message: e.message }); }
+};
+exports.remove = async (req, res) => { try { const count = await models.Passenger.destroy({ where: { id: req.params.id } }); if (!count) return res.status(404).json({ message: 'Not found' }); return res.status(204).send(); } catch (e) { return res.status(500).json({ message: e.message }); } };
 
-    // Check if user already exists
-    const existingUser = await Passenger.findOne({
-      $or: [{ email }, { phone }]
-    });
-
-    if (existingUser) {
-      return res.status(409).json(formatError('User with this email or phone already exists', 409));
-    }
-
-    // Create new passenger
-    const passengerData = {
-      externalId: generateExternalId('PASS'),
-      name,
-      phone,
-      email,
-      password: await hashPassword(password),
-      emergencyContacts: emergencyContacts || [],
-      preferences: preferences || {}
-    };
-
-    const passenger = await Passenger.create(passengerData);
-    const token = generateToken({ ...passenger.toObject(), role: 'passenger' });
-
-    res.status(201).json(formatResponse({
-      user: sanitizeUserData(passenger),
-      token
-    }, 'Passenger created successfully', 201));
-
-  } catch (error) {
-    console.error('Create passenger error:', error);
-    res.status(500).json(formatError('Failed to create passenger', 500, error));
-  }
+// Passenger self-control methods
+exports.getMyProfile = async (req, res) => {
+try {
+if (req.user.type !== 'passenger') return res.status(403).json({ message: 'Only passengers can access this endpoint' });
+const passenger = await models.Passenger.findByPk(req.user.id, { include: ['roles'] });
+if (!passenger) return res.status(404).json({ message: 'Passenger not found' });
+return res.json(passenger);
+} catch (e) { return res.status(500).json({ message: e.message }); }
 };
 
-// Get passenger by ID
-const getPassengerById = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const passenger = await Passenger.findById(id).populate('roles');
-
-    if (!passenger) {
-      return res.status(404).json(formatError('Passenger not found', 404));
-    }
-
-    res.json(formatResponse(sanitizeUserData(passenger)));
-
-  } catch (error) {
-    console.error('Get passenger error:', error);
-    res.status(500).json(formatError('Failed to get passenger', 500, error));
-  }
+exports.updateMyProfile = async (req, res) => {
+try {
+if (req.user.type !== 'passenger') return res.status(403).json({ message: 'Only passengers can access this endpoint' });
+const data = { ...req.body };
+// Prevent passengers from updating any rating-related fields
+if ('rating' in data) delete data.rating;
+if ('ratingCount' in data) delete data.ratingCount;
+if (data.password) data.password = await hashPassword(data.password);
+const [count] = await models.Passenger.update(data, { where: { id: req.user.id } });
+if (!count) return res.status(404).json({ message: 'Passenger not found' });
+const updated = await models.Passenger.findByPk(req.user.id);
+return res.json(updated);
+} catch (e) { return res.status(500).json({ message: e.message }); }
 };
 
-// Get passenger by external ID
-const getPassengerByExternalId = async (req, res) => {
-  try {
-    const { externalId } = req.params;
-    const passenger = await Passenger.findOne({ externalId }).populate('roles');
-
-    if (!passenger) {
-      return res.status(404).json(formatError('Passenger not found', 404));
-    }
-
-    res.json(formatResponse(sanitizeUserData(passenger)));
-
-  } catch (error) {
-    console.error('Get passenger by external ID error:', error);
-    res.status(500).json(formatError('Failed to get passenger', 500, error));
-  }
+exports.deleteMyAccount = async (req, res) => {
+try {
+if (req.user.type !== 'passenger') return res.status(403).json({ message: 'Only passengers can delete their account' });
+const count = await models.Passenger.destroy({ where: { id: req.user.id } });
+if (!count) return res.status(404).json({ message: 'Passenger not found' });
+return res.status(204).send();
+} catch (e) { return res.status(500).json({ message: e.message }); }
 };
 
-// List passengers with pagination
-const listPassengers = async (req, res) => {
-  try {
-    const { page, limit, skip } = getPaginationParams(req.query);
-    const { search, isActive } = req.query;
+// Passenger rates driver (0-5 cap). Passengers cannot change their own rating field.
+exports.rateDriver = async (req, res) => {
+try {
+if (req.user.type !== 'passenger') return res.status(403).json({ message: 'Only passengers can rate drivers' });
+const { rating, comment } = req.body;
+const driverId = req.params.driverId;
 
-    // Build query
-    let query = {};
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } }
-      ];
-    }
-    if (isActive !== undefined) {
-      query.isActive = isActive === 'true';
-    }
+const driver = await models.Driver.findByPk(driverId);
+if (!driver) return res.status(404).json({ message: 'Driver not found' });
 
-    const passengers = await Passenger.find(query)
-      .populate('roles')
-      .skip(skip)
-      .limit(limit)
-      .sort({ createdAt: -1 });
+const value = Number(rating);
+if (!Number.isFinite(value)) return res.status(400).json({ message: 'Invalid rating' });
+const newRating = Math.max(0, Math.min(5, value));
 
-    const total = await Passenger.countDocuments(query);
-
-    const sanitizedPassengers = passengers.map(passenger => sanitizeUserData(passenger));
-
-    res.json(formatResponse(formatPaginationResponse(sanitizedPassengers, page, limit, total)));
-
-  } catch (error) {
-    console.error('List passengers error:', error);
-    res.status(500).json(formatError('Failed to list passengers', 500, error));
-  }
+await models.Driver.update({ rating: newRating }, { where: { id: driverId } });
+const updatedDriver = await models.Driver.findByPk(driverId);
+return res.json({ message: 'Driver rated successfully', driver: updatedDriver, rating: newRating, comment });
+} catch (e) { return res.status(500).json({ message: e.message }); }
 };
 
-// Update passenger
-const updatePassenger = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updateData = { ...req.body };
-
-    // Remove fields that shouldn't be updated directly
-    delete updateData.password;
-    delete updateData.externalId;
-    delete updateData._id;
-
-    // Validate email if provided
-    if (updateData.email && !isValidEmail(updateData.email)) {
-      return res.status(400).json(formatError('Invalid email format', 400));
-    }
-
-    // Validate phone if provided
-    if (updateData.phone && !isValidPhone(updateData.phone)) {
-      return res.status(400).json(formatError('Invalid phone format', 400));
-    }
-
-    const passenger = await Passenger.findByIdAndUpdate(
-      id,
-      updateData,
-      { new: true, runValidators: true }
-    ).populate('roles');
-
-    if (!passenger) {
-      return res.status(404).json(formatError('Passenger not found', 404));
-    }
-
-    res.json(formatResponse(sanitizeUserData(passenger), 'Passenger updated successfully'));
-
-  } catch (error) {
-    console.error('Update passenger error:', error);
-    res.status(500).json(formatError('Failed to update passenger', 500, error));
-  }
-};
-
-// Delete passenger
-const deletePassenger = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const passenger = await Passenger.findByIdAndDelete(id);
-
-    if (!passenger) {
-      return res.status(404).json(formatError('Passenger not found', 404));
-    }
-
-    res.status(204).send();
-
-  } catch (error) {
-    console.error('Delete passenger error:', error);
-    res.status(500).json(formatError('Failed to delete passenger', 500, error));
-  }
-};
-
-// Batch get passengers by IDs
-const getPassengersByIds = async (req, res) => {
-  try {
-    const { ids } = req.body;
-
-    if (!Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json(formatError('IDs array is required', 400));
-    }
-
-    const passengers = await Passenger.find({ _id: { $in: ids } }).populate('roles');
-    const sanitizedPassengers = passengers.map(passenger => sanitizeUserData(passenger));
-
-    res.json(formatResponse(sanitizedPassengers));
-
-  } catch (error) {
-    console.error('Get passengers by IDs error:', error);
-    res.status(500).json(formatError('Failed to get passengers', 500, error));
-  }
-};
-
-// Authenticate passenger
-const authenticatePassenger = async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json(formatError('Email and password are required', 400));
-    }
-
-    const passenger = await Passenger.findOne({ email });
-    if (!passenger) {
-      return res.status(401).json(formatError('Invalid credentials', 401));
-    }
-
-    const isPasswordValid = await comparePassword(password, passenger.password);
-    if (!isPasswordValid) {
-      return res.status(401).json(formatError('Invalid credentials', 401));
-    }
-
-    if (!passenger.isActive) {
-      return res.status(403).json(formatError('Account is deactivated', 403));
-    }
-
-    // Update last login
-    passenger.lastLoginAt = new Date();
-    await passenger.save();
-
-    const token = generateToken({ ...passenger.toObject(), role: 'passenger' });
-
-    res.json(formatResponse({
-      user: sanitizeUserData(passenger),
-      token
-    }, 'Authentication successful'));
-
-  } catch (error) {
-    console.error('Authenticate passenger error:', error);
-    res.status(500).json(formatError('Authentication failed', 500, error));
-  }
-};
-
-module.exports = {
-  createPassenger,
-  getPassengerById,
-  getPassengerByExternalId,
-  listPassengers,
-  updatePassenger,
-  deletePassenger,
-  getPassengersByIds,
-  authenticatePassenger
-};
